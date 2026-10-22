@@ -1,0 +1,10 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.tmp
+portfolio.json
+picks.csv
+background.png
+recordings/*.mp4
+charts/*.png
