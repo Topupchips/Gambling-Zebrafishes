@@ -458,7 +458,7 @@ ROUND_COPY = {
     "size": ("HOW MUCH", "DO THEY BET?"),
     "poker": ("FOLD, CALL", "OR RAISE?"),
 }
-ROUND_NAME = {"buy": "BUY ROUND", "hold": "HOLD OR SELL", "size": "BET SIZE", "poker": "POKER HAND"}
+ROUND_NAME = {"buy": "BUY ROUND", "hold": "HOLD OR SELL", "size": "BET SIZE", "poker": "POKER HAND", "blackjack": "BLACKJACK"}
 
 
 @dataclass
@@ -473,6 +473,7 @@ class RoundInfo:
     fish_expected: int = 5
     footer: str = "PAPER PORTFOLIO  ·  REAL MARKET PRICES  ·  NOT FINANCIAL ADVICE"
     camera_label: str = "CAM 01  ·  THE TANK"
+    number_word: str = "ROUND"
 
 
 @dataclass
@@ -730,7 +731,7 @@ class Hud:
         blit(canvas, mark, x, y + 6, "lt")
         sub_y = y + mark.shape[0] + int(22 * k)
         info = self.info
-        sub = f"ROUND {info.number:02d}  ·  {ROUND_NAME.get(info.round_type, info.round_type.upper())}"
+        sub = f"{info.number_word} {info.number:02d}  ·  {ROUND_NAME.get(info.round_type, info.round_type.upper())}"
         sub_sprite = text_sprite(sub, "bold", int(34 * k), GOLD, tracking=int(6 * k))
         if self.layout.name == "wide":
             blit(canvas, sub_sprite, x + mark.shape[1] + 40, y + mark.shape[0] / 2 + 6, "lc")

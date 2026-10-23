@@ -51,6 +51,29 @@ Hardware this expects:
 
 There is no camera on a typical dev machine. `calibrate.py` and `pick.py` exit with a clear message in that case.
 
+## Blackjack
+
+The fish play a full blackjack table with play chips. A dealer follows house rules: a 6-deck shoe, the dealer stands on all 17s and peeks for blackjack, blackjack pays 3 to 2, and you can double on the first two cards. There are no splits or insurance. Every player decision is a fish vote: when the clock runs out, the busiest zone decides **HIT**, **STAND** or **DOUBLE**.
+
+```bash
+python blackjack.py --demo --hands 3 --fish-bet   # pixel tank, nothing saved
+python blackjack.py --hands 5                     # real camera, bankroll kept in blackjack.json
+```
+
+Draw the zones left to right: HIT, STAND, DOUBLE. With only two zones the fish can't double. `--fish-bet` adds a vote before each hand, using the same zones for the bet sizes in `--bets` (default `50,100,250`).
+
+| Flag | Effect |
+| --- | --- |
+| `--hands N` | Hands per recording (default 3) |
+| `--bet 100` | Chips per hand when the fish don't choose |
+| `--fish-bet`, `--bets 50,100,250` | The fish vote on the bet |
+| `--decision-seconds 8` | Length of each vote |
+| `--bankroll 1000`, `--reset` | Start or restart the chip bankroll |
+| `--seed 7` | Repeatable shuffle |
+| `--demo`, `--demo-style real`, `--video tank.mp4` | Rehearse without the live tank |
+
+Each session records a 1080×1920 video: the tank on top, then the felt table with dealt and flipped cards, the vote clock and live tallies, a "THE FISH SAY" reveal, the hand result, and the bankroll counter. Results print at the end, and the bankroll is saved after every hand (except in demo mode).
+
 ## Calibrate
 
 ```bash

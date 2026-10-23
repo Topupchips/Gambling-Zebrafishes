@@ -233,6 +233,9 @@ class PixelTank:
         self.countdown = countdown
         self.favourite = favourite if favourite is not None else self.rng.randrange(len(zones))
         self.t = 0.0
+        self.vote_start = 0.0
+        self.vote_seconds = countdown
+        self.vote_open = True
         self.frames = {
             (shift, fin): fish_sprite(shift, fin) for shift in (-1, 0, 1) for fin in (False, True)
         }
@@ -438,10 +441,23 @@ class PixelTank:
         m = mask[y0 - y : y1 - y, x0 - x : x1 - x]
         img[y0:y1, x0:x1][m] = sprite[y0 - y : y1 - y, x0 - x : x1 - x][m]
 
+    def start_vote(self, options: int, seconds: float) -> None:
+        """Begin a fresh vote over the first ``options`` zones (used by blackjack)."""
+        self.favourite = self.rng.randrange(max(1, min(options, len(self.zones))))
+        for f in self.fish:
+            f.loyal = self.rng.random() < 0.8
+        self.vote_start = self.t
+        self.vote_seconds = seconds
+        self.vote_open = True
+
+    def end_vote(self) -> None:
+        """Let the fish wander again between votes."""
+        self.vote_open = False
+
     def read(self) -> tuple[bool, np.ndarray]:
         dt = 1.0 / FPS
         self.t += dt
-        deciding = self.t > self.countdown * 0.45
+        deciding = self.vote_open and self.t - self.vote_start > self.vote_seconds * 0.45
         loyal = [f for f in self.fish if f.loyal]
         for f in self.fish:
             if deciding and f.loyal:

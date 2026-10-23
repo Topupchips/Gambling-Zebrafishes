@@ -332,6 +332,9 @@ class DemoTank:
         self.countdown = countdown
         self.favourite = favourite if favourite is not None else self.rng.randrange(len(zones))
         self.t = 0.0
+        self.vote_start = 0.0
+        self.vote_seconds = countdown
+        self.vote_open = True
         self.floor = self._make_floor()
         self.plain = self.floor.copy()
         self._make_caustic_fields()
@@ -462,10 +465,23 @@ class DemoTank:
         return cv2.GaussianBlur(light, (5, 5), 1.0)
 
     # Frames -----------------------------------------------------------------
+    def start_vote(self, options: int, seconds: float) -> None:
+        """Begin a fresh vote over the first ``options`` zones (used by blackjack)."""
+        self.favourite = self.rng.randrange(max(1, min(options, len(self.zones))))
+        for f in self.fish:
+            f.loyal = self.rng.random() < 0.8
+        self.vote_start = self.t
+        self.vote_seconds = seconds
+        self.vote_open = True
+
+    def end_vote(self) -> None:
+        """Let the fish wander again between votes."""
+        self.vote_open = False
+
     def read(self) -> tuple[bool, np.ndarray]:
         dt = 1.0 / FPS
         self.t += dt
-        deciding = self.t > self.countdown * 0.45
+        deciding = self.vote_open and self.t - self.vote_start > self.vote_seconds * 0.45
         for f in self.fish:
             if deciding and f.loyal:
                 zone = self.zones[self.favourite]
