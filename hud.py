@@ -500,7 +500,8 @@ class HudState:
 class Hud:
     """Stateful renderer. Call ``frame`` once per camera frame."""
 
-    def __init__(self, layout: Layout, info: RoundInfo, source_size: tuple[int, int], started: float) -> None:
+    def __init__(self, layout: Layout, info: RoundInfo, source_size: tuple[int, int], started: float, pixel_art: bool = False) -> None:
+        self.pixel_art = pixel_art
         self.layout = layout
         self.info = info
         self.src_w, self.src_h = source_size
@@ -619,8 +620,12 @@ class Hud:
 
     # Camera ------------------------------------------------------------------
     def _draw_camera(self, canvas, source, zones, counts, centroids, owners, leader, now) -> None:
-        cam = cv2.resize(source, (self.cam_w, self.cam_h), interpolation=cv2.INTER_AREA)
-        cam = cv2.convertScaleAbs(cam, alpha=1.08, beta=-8)
+        if self.pixel_art:
+            # Keep pixel art crisp: hard-edged scaling, no grading.
+            cam = cv2.resize(source, (self.cam_w, self.cam_h), interpolation=cv2.INTER_NEAREST)
+        else:
+            cam = cv2.resize(source, (self.cam_w, self.cam_h), interpolation=cv2.INTER_AREA)
+            cam = cv2.convertScaleAbs(cam, alpha=1.08, beta=-8)
         cam = cv2.multiply(cam, self.vignette, dtype=cv2.CV_8U)
         s = self.cam_scale
         pulse = 0.5 + 0.5 * math.sin(now * 7.0)

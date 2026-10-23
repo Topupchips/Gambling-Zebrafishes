@@ -344,6 +344,7 @@ class DemoTank:
         self.fish = [Fish(self.rng, cx + self.rng.uniform(-120, 120), cy + self.rng.uniform(-90, 90)) for _ in range(fish)]
         for f in self.fish:
             f.target = self._random_point()
+        self.empty_frame = self.floor.copy()
         self.detection_frame = self.plain
 
     # cv2.VideoCapture look-alikes -------------------------------------------

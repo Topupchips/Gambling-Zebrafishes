@@ -32,7 +32,8 @@ from utils import (
     resolve_background,
     update_config,
 )
-from demo import DemoTank, demo_zones
+import demo as real_demo
+import pixel_tank
 from hud import LAYOUTS, Hud, Layout, Quote, RoundInfo
 
 PICK_FIELDS = ["timestamp", "round_type", "subject", "zone_counts", "winner"]
@@ -415,6 +416,7 @@ def run_round(
     video: Path | None = None,
     *,
     demo: bool = False,
+    demo_style: str = "pixel",
     layout_name: str = "reel",
     note: str = "",
     prices: bool = True,
@@ -428,10 +430,11 @@ def run_round(
             labels = [zone.ticker for zone in config.zones] or list(DEMO_TICKERS)
         else:
             labels = list(ROUND_LABELS[round_type])
-        zones = demo_zones(labels)
+        tank_module = pixel_tank if demo_style == "pixel" else real_demo
+        zones = tank_module.demo_zones(labels)
         subject = (normalize_ticker(ticker) or "NVDA") if round_type == "hold" else ""
-        background = None
-        detector = MotionDetector()
+        background = None  # set from the tank's empty frame below
+        detector = None
     else:
         zones, subject = round_zones(config, round_type, ticker)
         background = None
@@ -450,7 +453,9 @@ def run_round(
     window = "fish-fund | q cancels"
     try:
         if demo:
-            capture = DemoTank(zones, float(config.countdown_seconds))
+            capture = (pixel_tank.PixelTank if demo_style == "pixel" else real_demo.DemoTank)(zones, float(config.countdown_seconds))
+            # The simulated tank knows exactly what it looks like empty, like --capture-background.
+            background = capture.empty_frame
             _ok, frame = capture.read()
         elif video is None:
             capture, frame = open_camera(config.camera_index)
@@ -483,7 +488,7 @@ def run_round(
 
         if demo:
             info.camera_label = "SIMULATED TANK"
-        hud = Hud(layout, info, (width, height), start)
+        hud = Hud(layout, info, (width, height), start, pixel_art=bool(getattr(capture, "pixel_art", False)))
         quotes = QuoteLoader(quote_symbols(round_type, zones, subject) if prices else [])
 
         prefix = "demo-" if demo else ""
@@ -633,6 +638,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Play this video through the overlay instead of the webcam.",
     )
     parser.add_argument("--demo", action="store_true", help="Rehearse with a simulated tank. Nothing is logged.")
+    parser.add_argument("--demo-style", choices=("pixel", "real"), default="pixel", help="pixel = pixel-art aquarium (default), real = realistic top-down tank.")
     parser.add_argument("--layout", choices=tuple(LAYOUTS), default="reel", help="reel = 1080x1920 vertical (default), wide = 1920x1080.")
     parser.add_argument("--note", default="", help='Line shown under the question, e.g. "POT: 40 CHIPS".')
     parser.add_argument("--footer", default=None, help="Replace the small line at the bottom. Pass \"\" to hide it.")
@@ -664,6 +670,7 @@ def main(argv: list[str] | None = None) -> None:
         args.ticker,
         args.video,
         demo=args.demo,
+        demo_style=args.demo_style,
         layout_name=args.layout,
         note=args.note,
         prices=not args.no_prices,
