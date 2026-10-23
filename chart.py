@@ -28,14 +28,50 @@ from utils import (
     percent_return,
 )
 
-BG = "#101114"
+BG = "#04100B"
+FELT = "#0B2A1D"
+FELT_HI = "#134531"
+PANEL = "#020806"
 INK = "#F4F1EA"
-MUTED = "#A1A6B0"
-FISH = "#FF4D2E"
-SPY = "#8E949F"
-GRID = "#2A2E38"
+MUTED = "#8FA89C"
+FISH = "#F5C542"
+HOT = "#FF3B4E"
+SPY = "#8FA89C"
+GRID = "#1C3A2C"
+CHIPS = ("#FF3B4E", "#2EE6D6", "#F5C542", "#A66BFF", "#9BFF4D")
 WIDTH = 1080
 HEIGHT = 1920
+FONT_DIR = Path(__file__).resolve().parent / "fonts"
+
+
+def _font(name: str, size: float):
+    from matplotlib.font_manager import FontProperties
+
+    path = FONT_DIR / name
+    if path.exists():
+        return FontProperties(fname=str(path), size=size)
+    return FontProperties(family="DejaVu Sans", weight="bold", size=size)
+
+
+def _px(pixels: float) -> float:
+    """Font size in points for a cap height of roughly ``pixels`` on this canvas."""
+    return pixels * 72 / 100
+
+
+def _felt(width: int, height: int):
+    import numpy as np
+
+    yy, xx = np.mgrid[0:height, 0:width].astype(np.float32)
+    d = np.clip(np.sqrt(((xx - width * 0.5) / width) ** 2 + ((yy - height * 0.35) / height) ** 2) * 1.9, 0, 1)[..., None]
+
+    def rgb(value: str):
+        value = value.lstrip("#")
+        return np.array([int(value[i : i + 2], 16) for i in (0, 2, 4)], np.float32) / 255
+
+    hi, mid, deep = rgb(FELT_HI), rgb(FELT), rgb(BG)
+    image = np.where(d < 0.5, hi * (1 - d * 2) + mid * (d * 2), mid * (2 - d * 2) + deep * (d * 2 - 1))
+    image += np.random.default_rng(7).normal(0, 0.016, image.shape)
+    return np.clip(image, 0, 1)
 
 
 def price_on(prices: dict[date, float], day: date, ticker: str) -> float:
@@ -182,95 +218,105 @@ def write_chart(
     spy_pct = percent_return(spy_values[-1], start_cash)
     rows = _holding_rows(portfolio, closes, days[-1])
 
-    matplotlib.rcParams.update(
-        {
-            "font.family": "DejaVu Sans",
-            "text.color": INK,
-            "axes.labelcolor": MUTED,
-            "xtick.color": MUTED,
-            "ytick.color": MUTED,
-        }
-    )
+    from matplotlib.patches import Ellipse, FancyBboxPatch
+
+    anton = lambda px: _font("Anton-Regular.ttf", _px(px))  # noqa: E731
+    bold = lambda px: _font("SpaceGrotesk-Bold.ttf", _px(px))  # noqa: E731
+    mono = lambda px: _font("JetBrainsMono-Bold.ttf", _px(px))  # noqa: E731
+
+    matplotlib.rcParams.update({"text.color": INK, "xtick.color": MUTED, "ytick.color": MUTED})
     fig = Figure(figsize=(WIDTH / 100, HEIGHT / 100), dpi=100)
     fig.patch.set_facecolor(BG)
+    fig.figimage(_felt(WIDTH, HEIGHT), xo=0, yo=0, zorder=0, origin="upper")
+
+    def fx(px: float) -> float:
+        return px / WIDTH
+
+    def fy(px: float) -> float:
+        return 1 - px / HEIGHT
+
+    def card(x: float, y: float, w: float, h: float, edge: str = "#41594E", face: str = PANEL, alpha: float = 0.6, lw: float = 2) -> None:
+        fig.patches.append(
+            FancyBboxPatch(
+                (fx(x), fy(y + h)),
+                fx(w),
+                h / HEIGHT,
+                boxstyle="round,pad=0,rounding_size=0.022",
+                transform=fig.transFigure,
+                facecolor=face,
+                edgecolor=edge,
+                linewidth=lw,
+                alpha=alpha,
+                zorder=1,
+                mutation_aspect=WIDTH / HEIGHT,
+            )
+        )
+
+    day_count = (days[-1] - days[0]).days
+    fig.text(fx(56), fy(60), "FISH FUND", fontproperties=anton(150), color=INK, ha="left", va="top")
     fig.text(
-        0.08,
-        0.955,
-        "FISH FUND",
-        fontsize=44,
-        fontweight="bold",
-        color=INK,
-        ha="left",
-        va="top",
-    )
-    fig.text(
-        0.08,
-        0.918,
-        f"since {format_date(days[0])}",
-        fontsize=18,
-        color=MUTED,
-        ha="left",
-        va="top",
-    )
-    fig.text(
-        0.08,
-        0.875,
-        format_pct(fish_pct),
-        fontsize=54,
-        fontweight="bold",
+        fx(60),
+        fy(250),
+        f"5 ZEBRAFISH VS THE S&P 500  ·  DAY {day_count}",
+        fontproperties=bold(34),
         color=FISH,
         ha="left",
         va="top",
     )
-    fig.text(
-        0.54,
-        0.875,
-        format_pct(spy_pct),
-        fontsize=54,
-        fontweight="bold",
-        color=SPY,
-        ha="left",
-        va="top",
-    )
-    fig.text(0.08, 0.812, "FISH", fontsize=16, fontweight="bold", color=FISH, ha="left", va="top")
-    fig.text(
-        0.54,
-        0.812,
-        "S&P 500",
-        fontsize=16,
-        fontweight="bold",
-        color=SPY,
-        ha="left",
-        va="top",
-    )
+    fig.text(fx(60), fy(300), f"since {format_date(days[0])}", fontproperties=mono(24), color=MUTED, ha="left", va="top")
 
-    ax = fig.add_axes([0.12, 0.40, 0.80, 0.36])
-    ax.set_facecolor(BG)
+    # Score cards.
+    lead = fish_pct - spy_pct
+    for x, label, pct, colour, winning in (
+        (40, "THE FISH", fish_pct, FISH, lead > 0.005),
+        (556, "S&P 500", spy_pct, INK, lead < -0.005),
+    ):
+        card(x, 360, 484, 250, edge=colour if winning else "#41594E", lw=4 if winning else 2, alpha=0.7)
+        fig.text(fx(x + 36), fy(400), label, fontproperties=bold(30), color=MUTED, ha="left", va="top")
+        fig.text(
+            fx(x + 30),
+            fy(456),
+            format_pct(pct),
+            fontproperties=anton(120),
+            color=(colour if pct >= 0 else HOT) if label == "THE FISH" else INK,
+            ha="left",
+            va="top",
+        )
+    if lead > 0.005:
+        verdict, face, ink = "THE FISH ARE BEATING WALL STREET", FISH, PANEL
+    elif lead < -0.005:
+        verdict, face, ink = "WALL STREET IS AHEAD. FOR NOW.", HOT, INK
+    else:
+        verdict, face, ink = "DEAD HEAT", INK, PANEL
+    card(40, 640, 1000, 84, edge=face, face=face, alpha=1.0)
+    fig.text(0.5, fy(682), verdict, fontproperties=anton(46), color=ink, ha="center", va="center")
+
+    # Chart.
+    card(40, 760, 1000, 600, alpha=0.55)
+    ax = fig.add_axes([fx(120), fy(1320), fx(880), 500 / HEIGHT])
+    ax.set_facecolor("none")
+    ax.patch.set_alpha(0)
+    ax.set_zorder(5)
     xs = mdates.date2num(days)
     mark = "o" if len(xs) < 3 else None
-    (spy_line,) = ax.plot(xs, spy_values, color=SPY, linewidth=2.6, solid_capstyle="round", zorder=2)
-    ax.plot(
-        xs,
-        fish_values,
-        color=FISH,
-        linewidth=8,
-        alpha=0.18,
-        solid_capstyle="round",
-        zorder=3,
-    )
+    (spy_line,) = ax.plot(xs, spy_values, color=SPY, linewidth=3, linestyle=(0, (4, 3)), solid_capstyle="round", zorder=2)
+    low = min(fish_values + spy_values)
+    high = max(fish_values + spy_values)
+    pad = max((high - low) * 0.18, 1.0)
+    ax.fill_between(xs, fish_values, low - pad, color=FISH, alpha=0.10, zorder=1, linewidth=0)
+    for width, alpha in ((22, 0.05), (14, 0.09), (8, 0.16)):
+        ax.plot(xs, fish_values, color=FISH, linewidth=width, alpha=alpha, solid_capstyle="round", zorder=3)
     (fish_line,) = ax.plot(
         xs,
         fish_values,
         color=FISH,
-        linewidth=3.2,
+        linewidth=4.5,
         marker=mark,
-        markersize=8,
+        markersize=10,
         solid_capstyle="round",
         zorder=4,
     )
-    low = min(fish_values + spy_values)
-    high = max(fish_values + spy_values)
-    pad = max((high - low) * 0.18, 1.0)
+    ax.scatter([xs[-1]], [fish_values[-1]], s=260, color=FISH, zorder=5, edgecolors=PANEL, linewidths=4)
     ax.set_ylim(low - pad, high + pad)
     if len(xs) == 1:
         ax.set_xlim(xs[0] - 1, xs[0] + 1)
@@ -280,9 +326,12 @@ def write_chart(
         ax.set_xlim(xs[0] - x_pad, xs[-1] + x_pad)
     ax.yaxis.set_major_formatter(_money_formatter(fish_values + spy_values))
     ax.set_xticks(mdates.date2num(tick_days(days)))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-    ax.tick_params(labelsize=13, length=0, pad=8)
-    ax.yaxis.grid(True, color=GRID, linewidth=1)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+    ax.tick_params(length=0, pad=10)
+    for tick in ax.get_xticklabels() + ax.get_yticklabels():
+        tick.set_fontproperties(mono(19))
+        tick.set_color(MUTED)
+    ax.yaxis.grid(True, color=GRID, linewidth=1.2)
     ax.set_axisbelow(True)
     for spine in ax.spines.values():
         spine.set_visible(False)
@@ -293,40 +342,38 @@ def write_chart(
         ["FISH", "S&P 500"],
         loc="upper left",
         frameon=False,
-        fontsize=14,
+        prop=bold(24),
         borderpad=0.2,
-        handlelength=1.6,
+        handlelength=1.8,
     )
     for text, color in zip(legend.get_texts(), (FISH, SPY)):
         text.set_color(color)
-        text.set_fontweight("bold")
+
+    # Holdings.
+    shown = rows[:6]
+    card(40, 1390, 1000, 110 + len(shown) * 52 + (40 if len(rows) > len(shown) else 0), alpha=0.55)
+    fig.text(fx(76), fy(1424), "WHAT THE FISH OWN", fontproperties=bold(26), color=MUTED, ha="left", va="top")
+    for index, (label, shares, value) in enumerate(shown):
+        cy = 1500 + index * 52
+        colour = CHIPS[index % len(CHIPS)] if label != "Cash" else "#7CE38B"
+        fig.patches.append(
+            Ellipse((fx(96), fy(cy)), 30 / WIDTH, 30 / HEIGHT, transform=fig.transFigure, facecolor=colour, edgecolor=INK, linewidth=2.5, zorder=3)
+        )
+        fig.text(fx(130), fy(cy), label.upper(), fontproperties=anton(40), color=INK, ha="left", va="center")
+        fig.text(fx(560), fy(cy), shares, fontproperties=mono(24), color=MUTED, ha="right", va="center")
+        fig.text(fx(1000), fy(cy), value, fontproperties=anton(40), color=INK, ha="right", va="center")
+    if len(rows) > len(shown):
+        fig.text(fx(130), fy(1500 + len(shown) * 52), f"and {len(rows) - len(shown)} more", fontproperties=mono(22), color=MUTED, ha="left", va="center")
 
     fig.text(
-        0.08,
-        0.345,
-        "HOLDINGS",
-        fontsize=16,
-        fontweight="bold",
+        0.5,
+        fy(1866),
+        "PAPER PORTFOLIO  ·  REAL MARKET PRICES  ·  NOT FINANCIAL ADVICE",
+        fontproperties=mono(20),
         color=MUTED,
-        ha="left",
-        va="top",
+        ha="center",
+        va="center",
     )
-    shown = rows[:9]
-    for index, (label, shares, value) in enumerate(shown):
-        y = 0.305 - index * 0.028
-        fig.text(0.08, y, label, fontsize=22, fontweight="bold", color=INK, ha="left", va="center")
-        fig.text(0.42, y, shares, fontsize=18, color=MUTED, ha="left", va="center")
-        fig.text(0.92, y, value, fontsize=22, fontweight="bold", color=INK, ha="right", va="center")
-    if len(rows) > len(shown):
-        fig.text(
-            0.08,
-            0.305 - len(shown) * 0.028,
-            f"and {len(rows) - len(shown)} more",
-            fontsize=16,
-            color=MUTED,
-            ha="left",
-            va="center",
-        )
 
     output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=100, facecolor=BG, edgecolor=BG)

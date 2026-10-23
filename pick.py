@@ -7,6 +7,7 @@ import math
 import os
 import random
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -31,19 +32,18 @@ from utils import (
     resolve_background,
     update_config,
 )
+from demo import DemoTank, demo_zones
+from hud import LAYOUTS, Hud, Layout, Quote, RoundInfo
 
 PICK_FIELDS = ["timestamp", "round_type", "subject", "zone_counts", "winner"]
-ZONE_COLORS = (
-    (48, 77, 255),
-    (80, 200, 255),
-    (255, 160, 64),
-    (120, 210, 140),
-    (210, 110, 240),
-)
-INK = (16, 16, 18)
-WHITE = (244, 241, 234)
-GREY = (150, 150, 156)
 FRAME_THRESHOLD = 28
+WRITER_FPS = 30.0
+ROUND_LABELS = {
+    "hold": ("HOLD", "SELL"),
+    "size": ("10%", "25%", "50%"),
+    "poker": ("FOLD", "CALL", "RAISE"),
+}
+DEMO_TICKERS = ("NVDA", "SPY", "TSLA")
 
 
 def choose_winner(
@@ -196,150 +196,23 @@ def round_zones(config: Config, round_type: str, ticker: str) -> tuple[list[Zone
                 "A size round needs at least 3 zones, drawn in order 10%, 25%, 50%. "
                 "Run python calibrate.py."
             )
-        labels = ("10%", "25%", "50%")
         labeled = [
             Zone(label, zone.x, zone.y, zone.w, zone.h)
-            for label, zone in zip(labels, zones[:3])
+            for label, zone in zip(ROUND_LABELS["size"], zones[:3])
         ]
         return labeled, ""
-    die("Round must be buy, hold, or size.")
-
-
-def round_heading(round_type: str, subject: str) -> str:
-    if round_type == "buy":
-        return "BUY"
-    if round_type == "hold":
-        return f"HOLD OR SELL  {subject}"
-    return "SIZE"
-
-
-def fit_scale(text: str, max_width: int, max_scale: float, thickness: int = 2) -> float:
-    scale = max_scale
-    while scale > 0.4:
-        (width, _height), _base = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
-        if width <= max_width:
-            return scale
-        scale -= 0.05
-    return 0.4
-
-
-def draw_chip(
-    image: np.ndarray,
-    text: str,
-    x: int,
-    y: int,
-    scale: float,
-    fg: tuple[int, int, int],
-    thickness: int = 2,
-) -> None:
-    (width, height), base = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness)
-    pad_x, pad_y = 12, 8
-    x = min(max(int(x), 0), max(0, image.shape[1] - width - pad_x * 2))
-    y = min(max(int(y), 0), max(0, image.shape[0] - height - base - pad_y * 2))
-    cv2.rectangle(
-        image,
-        (x, y),
-        (x + width + pad_x * 2, y + height + base + pad_y * 2),
-        INK,
-        -1,
-    )
-    cv2.putText(
-        image,
-        text,
-        (x + pad_x, y + height + pad_y),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        scale,
-        fg,
-        thickness,
-        cv2.LINE_AA,
-    )
-
-
-def draw_overlay(
-    frame: np.ndarray,
-    zones: list[Zone],
-    counts: list[int],
-    centroids: list[tuple[int, int]],
-    owners: list[int | None],
-    heading: str,
-    seconds_left: int,
-) -> np.ndarray:
-    display = frame.copy()
-    height, width = display.shape[:2]
-    for index, zone in enumerate(zones):
-        color = ZONE_COLORS[index % len(ZONE_COLORS)]
-        cv2.rectangle(
-            display,
-            (zone.x, zone.y),
-            (zone.x + zone.w, zone.y + zone.h),
-            color,
-            max(2, width // 480),
-        )
-        label_scale = fit_scale(zone.ticker, max(40, zone.w - 20), 0.95)
-        draw_chip(display, zone.ticker, zone.x + 8, zone.y + 8, label_scale, WHITE)
-        count_text = str(counts[index])
-        count_scale = fit_scale(count_text, max(24, zone.w // 2), min(2.2, max(zone.h, 1) / 70))
-        (tw, th), _base = cv2.getTextSize(count_text, cv2.FONT_HERSHEY_SIMPLEX, count_scale, 2)
-        draw_chip(
-            display,
-            count_text,
-            zone.x + zone.w // 2 - tw // 2,
-            zone.y + zone.h // 2 - th // 2,
-            count_scale,
-            color,
-        )
-    for (x, y), owner in zip(centroids, owners):
-        color = GREY if owner is None else ZONE_COLORS[owner % len(ZONE_COLORS)]
-        cv2.circle(display, (x, y), 8, color, 2, cv2.LINE_AA)
-
-    bar_h = max(72, height // 8)
-    cv2.rectangle(display, (0, 0), (width, bar_h), INK, -1)
-    head_scale = fit_scale(heading, int(width * 0.52), 1.05)
-    cv2.putText(
-        display,
-        heading,
-        (24, int(bar_h * 0.68)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        head_scale,
-        WHITE,
-        2,
-        cv2.LINE_AA,
-    )
-    timer = str(seconds_left)
-    timer_scale = fit_scale(timer, int(width * 0.22), 2.1, thickness=3)
-    (tw, _th), _base = cv2.getTextSize(timer, cv2.FONT_HERSHEY_SIMPLEX, timer_scale, 3)
-    cv2.putText(
-        display,
-        timer,
-        (width - tw - 28, int(bar_h * 0.72)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        timer_scale,
-        WHITE,
-        3,
-        cv2.LINE_AA,
-    )
-    return display
-
-
-def draw_banner(frame: np.ndarray, label: str) -> np.ndarray:
-    display = frame.copy()
-    height, width = display.shape[:2]
-    veil = np.full_like(display, INK)
-    cv2.addWeighted(veil, 0.78, display, 0.22, 0, display)
-    text = f"FISH PICKED: {label}"
-    scale = fit_scale(text, int(width * 0.88), max(1.2, width / 460), thickness=4)
-    (tw, th), _base = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, scale, 4)
-    cv2.putText(
-        display,
-        text,
-        ((width - tw) // 2, (height + th) // 2),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        scale,
-        ZONE_COLORS[0],
-        4,
-        cv2.LINE_AA,
-    )
-    return display
+    if round_type == "poker":
+        if len(zones) < 3:
+            die(
+                "A poker round needs at least 3 zones, drawn in order FOLD, CALL, RAISE. "
+                "Run python calibrate.py, or rehearse with --demo."
+            )
+        labeled = [
+            Zone(label, zone.x, zone.y, zone.w, zone.h)
+            for label, zone in zip(ROUND_LABELS["poker"], zones[:3])
+        ]
+        return labeled, ""
+    die("Round must be buy, hold, size, or poker.")
 
 
 def even_frame(frame: np.ndarray) -> np.ndarray:
@@ -449,20 +322,108 @@ def _read_video_frame(capture, width: int, height: int, recording: Path, path: P
     return _fit_frame(frame, width, height)
 
 
+def count_rounds(path: Path = PICKS_PATH) -> int:
+    if not path.exists():
+        return 0
+    with path.open() as handle:
+        return max(0, sum(1 for line in handle if line.strip()) - 1)
+
+
+def fetch_quotes(symbols: list[str]) -> dict[str, Quote]:
+    """Latest close and day change for each symbol. Empty on any failure."""
+    from datetime import timedelta
+
+    from utils import PriceError, daily_closes, market_today
+
+    symbols = [s for s in dict.fromkeys(symbols) if normalize_ticker(s)]
+    if not symbols:
+        return {}
+    today = market_today()
+    try:
+        closes = daily_closes(symbols, today - timedelta(days=14), today)
+    except (PriceError, Exception):  # noqa: BLE001 - graphics must never stop a round
+        return {}
+    quotes: dict[str, Quote] = {}
+    for symbol, history in closes.items():
+        days = sorted(history)
+        last = history[days[-1]]
+        change = None
+        if len(days) > 1 and history[days[-2]]:
+            change = (last / history[days[-2]] - 1) * 100
+        quotes[symbol] = Quote(price=last, change_pct=change)
+    return quotes
+
+
+class QuoteLoader:
+    """Fetch prices on a thread so the round starts immediately."""
+
+    def __init__(self, symbols: list[str]) -> None:
+        self.result: dict[str, Quote] | None = None
+        self.delivered = False
+        if not symbols:
+            self.result = {}
+            return
+        self.thread = threading.Thread(target=self._run, args=(symbols,), daemon=True)
+        self.thread.start()
+
+    def _run(self, symbols: list[str]) -> None:
+        self.result = fetch_quotes(symbols)
+
+    def take(self) -> dict[str, Quote] | None:
+        if self.delivered or self.result is None:
+            return None
+        self.delivered = True
+        return self.result
+
+
+def quote_symbols(round_type: str, zones: list[Zone], subject: str) -> list[str]:
+    if round_type == "buy":
+        return [zone.ticker for zone in zones]
+    if round_type == "hold" and subject:
+        return [subject]
+    return []
+
+
+def preview_size(layout: Layout, scale: float | None) -> tuple[int, int]:
+    w, h = layout.size
+    if scale is None:
+        scale = 900 / h if layout.name == "reel" else 1280 / w
+    return max(1, int(w * scale)), max(1, int(h * scale))
+
+
 def run_round(
     config: Config,
     config_path: Path,
     round_type: str,
     ticker: str,
     video: Path | None = None,
-) -> None:
-    zones, subject = round_zones(config, round_type, ticker)
-    background = None
-    detector = None
-    if config.background_mode == "frame":
-        background = load_background(config, config_path)
-    else:
+    *,
+    demo: bool = False,
+    layout_name: str = "reel",
+    note: str = "",
+    prices: bool = True,
+    preview: bool = True,
+    preview_scale: float | None = None,
+    footer: str | None = None,
+) -> Path | None:
+    layout = LAYOUTS[layout_name]
+    if demo:
+        if round_type == "buy":
+            labels = [zone.ticker for zone in config.zones] or list(DEMO_TICKERS)
+        else:
+            labels = list(ROUND_LABELS[round_type])
+        zones = demo_zones(labels)
+        subject = (normalize_ticker(ticker) or "NVDA") if round_type == "hold" else ""
+        background = None
         detector = MotionDetector()
+    else:
+        zones, subject = round_zones(config, round_type, ticker)
+        background = None
+        detector = None
+        if config.background_mode == "frame":
+            background = load_background(config, config_path)
+        else:
+            detector = MotionDetector()
 
     if hasattr(cv2, "utils") and hasattr(cv2.utils, "logging"):
         cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_SILENT)
@@ -470,8 +431,12 @@ def run_round(
     capture = None
     writer = None
     recording: Path | None = None
+    window = "fish-fund | q cancels"
     try:
-        if video is None:
+        if demo:
+            capture = DemoTank(zones, float(config.countdown_seconds))
+            _ok, frame = capture.read()
+        elif video is None:
             capture, frame = open_camera(config.camera_index)
         else:
             capture, frame = open_video(video)
@@ -480,23 +445,43 @@ def run_round(
         fps = capture.get(cv2.CAP_PROP_FPS)
         if not fps or fps < 1 or fps > 120:
             fps = 30.0
-        recording = RECORDINGS_DIR / f"{file_stamp()}.mp4"
-        writer = open_writer(recording, width, height, fps)
-        window = "fish-fund pick | q cancels"
-        cv2.namedWindow(window, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(window, width, height)
-        cv2.moveWindow(window, 80, 40)
-        heading = round_heading(round_type, subject)
+
+        info = RoundInfo(
+            round_type=round_type,
+            labels=[zone.ticker for zone in zones],
+            subject=subject,
+            note=note,
+            number=count_rounds() + 1,
+            countdown=float(config.countdown_seconds),
+            reveal_seconds=float(config.banner_seconds),
+        )
+        if footer is not None:
+            info.footer = footer
+        start = time.monotonic()
+        hud = Hud(layout, info, (width, height), start)
+        quotes = QuoteLoader(quote_symbols(round_type, zones, subject) if prices else [])
+
+        prefix = "demo-" if demo else ""
+        recording = RECORDINGS_DIR / f"{prefix}{file_stamp()}.mp4"
+        out_w, out_h = layout.size
+        writer = open_writer(recording, out_w, out_h, WRITER_FPS)
+        if preview:
+            pw, ph = preview_size(layout, preview_scale)
+            cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(window, pw, ph)
+            cv2.moveWindow(window, 60, 30)
         wait_ms = 1 if video is None else max(1, int(round(1000 / fps)))
         samples: list[tuple[float, list[int]]] = []
-        start = time.monotonic()
         winner: int | None = None
         banner_until = 0.0
+        written = 0
         first = True
         cancelled = False
         while True:
             if not first:
-                if video is None:
+                if demo:
+                    _ok, frame = capture.read()
+                elif video is None:
                     frame = _read_frame(capture, width, height, recording)
                 else:
                     frame = _read_video_frame(capture, width, height, recording, video)
@@ -509,33 +494,40 @@ def run_round(
                 die("background_mode is frame but no background image is loaded.")
             centroids = centroids_from_mask(mask, config.min_blob_area, config.max_blob_area)
             counts, owners = count_zones(centroids, zones)
-            elapsed = time.monotonic() - start
+            now = time.monotonic()
+            elapsed = now - start
+            fresh = quotes.take()
+            if fresh:
+                hud.set_quotes(fresh)
             if winner is None:
                 samples.append((elapsed, list(counts)))
                 if elapsed >= config.countdown_seconds:
                     winner = choose_winner(samples)
-                    banner_until = time.monotonic() + config.banner_seconds
-            if winner is None:
-                seconds_left = max(1, math.ceil(config.countdown_seconds - elapsed - 1e-9))
-                display = draw_overlay(
-                    frame, zones, counts, centroids, owners, heading, seconds_left
-                )
-            else:
-                display = draw_banner(frame, zones[winner].ticker)
-            wrote = writer.write(display)
-            if wrote is False:
-                writer.release()
-                writer = None
-                recording.unlink(missing_ok=True)
-                die(f"Could not write a frame to {recording}. The recording was not saved.")
-            cv2.imshow(window, display)
-            key = cv2.waitKey(wait_ms) & 0xFF
+                    hud.declare_winner(winner, samples[-1][1], now)
+                    banner_until = now + config.banner_seconds
+            display = hud.frame(frame, zones, counts, centroids, owners, now)
+
+            # Keep the recording in real time even when a frame takes long to draw.
+            due = int((time.monotonic() - start) * WRITER_FPS) + 1
+            repeats = max(1, min(4, due - written))
+            for _ in range(repeats):
+                if writer.write(display) is False:
+                    writer.release()
+                    writer = None
+                    recording.unlink(missing_ok=True)
+                    die(f"Could not write a frame to {recording}. The recording was not saved.")
+            written += repeats
+
+            key = 255
+            if preview:
+                cv2.imshow(window, cv2.resize(display, preview_size(layout, preview_scale), interpolation=cv2.INTER_AREA))
+                key = cv2.waitKey(wait_ms) & 0xFF
+            elif video is not None:
+                time.sleep(wait_ms / 1000)
             if winner is None and key in (ord("q"), 27):
                 cancelled = True
                 break
-            if winner is not None and (
-                time.monotonic() >= banner_until or key in (ord("q"), 27)
-            ):
+            if winner is not None and (time.monotonic() >= banner_until or key in (ord("q"), 27)):
                 break
         if winner is None or recording is None:
             if cancelled and recording is not None:
@@ -543,20 +535,25 @@ def run_round(
                     f"Round cancelled. Partial recording kept at {recording.resolve()}. "
                     "No row was added to picks.csv."
                 )
-            return
+            return None
         final_counts = samples[-1][1]
         label = zones[winner].ticker
-        log_pick(round_type, subject, zones, final_counts, label)
         print(f"FISH PICKED: {label}")
         print(", ".join(f"{zone.ticker} {count}" for zone, count in zip(zones, final_counts)))
         print(f"Recording: {recording.resolve()}")
-        print(f"Logged: {PICKS_PATH.resolve()}")
+        if demo:
+            print("Demo round: nothing was logged.")
+        else:
+            log_pick(round_type, subject, zones, final_counts, label)
+            print(f"Logged: {PICKS_PATH.resolve()}")
+        return recording
     finally:
         if writer is not None:
             writer.release()
         if capture is not None:
             capture.release()
-        cv2.destroyAllWindows()
+        if preview:
+            cv2.destroyAllWindows()
 
 
 def capture_background(config: Config, config_path: Path) -> None:
@@ -591,7 +588,7 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Save one empty-tank frame and switch config to frame mode.",
     )
-    parser.add_argument("--round", dest="round_type", choices=("buy", "hold", "size"))
+    parser.add_argument("--round", dest="round_type", choices=("buy", "hold", "size", "poker"))
     parser.add_argument("--ticker", default="", help="Stock for a hold round, such as AAPL.")
     parser.add_argument(
         "--video",
@@ -599,23 +596,45 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Play this video through the overlay instead of the webcam.",
     )
+    parser.add_argument("--demo", action="store_true", help="Rehearse with a simulated tank. Nothing is logged.")
+    parser.add_argument("--layout", choices=tuple(LAYOUTS), default="reel", help="reel = 1080x1920 vertical (default), wide = 1920x1080.")
+    parser.add_argument("--note", default="", help='Line shown under the question, e.g. "POT: 40 CHIPS".')
+    parser.add_argument("--footer", default=None, help="Replace the small line at the bottom. Pass \"\" to hide it.")
+    parser.add_argument("--no-prices", action="store_true", help="Skip the live price lookup.")
+    parser.add_argument("--no-preview", action="store_true", help="Record without opening a window.")
+    parser.add_argument("--preview-scale", type=float, default=None, help="Preview window size, e.g. 0.5.")
     args = parser.parse_args(argv)
     if args.capture_background and args.round_type:
         die("Use either --capture-background or --round, not both.")
-    if args.capture_background and args.video is not None:
-        die("Use either --capture-background or --video, not both.")
+    if args.capture_background and (args.video is not None or args.demo):
+        die("--capture-background needs the real webcam. Drop --video and --demo.")
+    if args.demo and args.video is not None:
+        die("Use either --demo or --video, not both.")
     config = load_config(args.config)
     if args.capture_background:
         capture_background(config, args.config)
         return
     if not args.round_type:
         die(
-            "Pass --round buy, --round hold --ticker AAPL, --round size, "
-            "or --capture-background."
+            "Pass --round buy, --round hold --ticker AAPL, --round size, --round poker, "
+            "or --capture-background. Add --demo to rehearse without a camera."
         )
     if args.ticker and args.round_type != "hold":
         die("--ticker is only used with --round hold.")
-    run_round(config, args.config, args.round_type, args.ticker, args.video)
+    run_round(
+        config,
+        args.config,
+        args.round_type,
+        args.ticker,
+        args.video,
+        demo=args.demo,
+        layout_name=args.layout,
+        note=args.note,
+        prices=not args.no_prices,
+        preview=not args.no_preview,
+        preview_scale=args.preview_scale,
+        footer=args.footer,
+    )
 
 
 if __name__ == "__main__":

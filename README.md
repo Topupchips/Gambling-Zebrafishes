@@ -6,9 +6,30 @@ A webcam looks down on one tank. The tank is split into zones along its length, 
 
 Nothing in this project talks to a broker, and nothing sends orders.
 
+## What a round looks like
+
+![Countdown, reveal, and the chart poster](docs/preview.png)
+
+Every round renders as a broadcast package and records straight to mp4:
+
+- **Vertical 1080×1920 by default**, ready for Reels, TikTok and Shorts. `--layout wide` gives 1920×1080.
+- Casino-felt look: gold-framed tank cam, zone targets in poker-chip colours, a fading trail behind every fish.
+- A countdown ring that turns red and pulses for the last 5 seconds, plus a live leaderboard with animated bars.
+- A slot-machine reveal that spins through the options and lands on the pick, then a flash, a shockwave, chip confetti, and an "OFFICIAL PICK #NN" stamp.
+- A ticker tape with live prices on buy and hold rounds, and a timestamp in the header so viewers can see it is live.
+
+Rehearse the whole thing without a camera or fish:
+
+```bash
+python pick.py --round buy --demo
+python pick.py --round poker --demo --note "POT: 60 CHIPS"
+```
+
+Demo rounds swim five simulated fish through the real detection and graphics. They are saved as `recordings/demo-*.mp4` and never logged.
+
 ## Setup
 
-Python 3.11 or newer.
+Python 3.11 or newer. The broadcast fonts (Anton, Space Grotesk, JetBrains Mono, all SIL OFL) ship in `fonts/`.
 
 ```bash
 python3 -m venv .venv
@@ -83,7 +104,7 @@ python pick.py --round buy
 
 `python pick.py --round buy --video tank.mp4` plays that file through the same detection and overlay instead of the webcam.
 
-The preview shows each zone, its ticker, a live fish count, and the countdown (`countdown_seconds`, default 15). The whole round, including the overlay, is saved to `recordings/<timestamp>.mp4`. When time is up, the zone with the most fish wins. If zones are tied, the higher average count over the final 3 seconds wins. If that is still tied, one of the remaining zones is chosen at random. A banner reads `FISH PICKED: <TICKER>` for `banner_seconds` (default 5). The result is appended to `picks.csv`.
+The preview shows each zone, its ticker, a live fish count, the leaderboard, and the countdown (`countdown_seconds`, default 15). The whole round, graphics included, is saved to `recordings/<timestamp>.mp4`. When time is up, the zone with the most fish wins. If zones are tied, the higher average count over the final 3 seconds wins. If that is still tied, one of the remaining zones is chosen at random. The reveal plays for `banner_seconds` (default 7). The result is appended to `picks.csv`.
 
 Place that trade yourself in your brokerage. Then record the fill:
 
@@ -99,11 +120,28 @@ Other rounds:
 ```bash
 python pick.py --round hold --ticker AAPL
 python pick.py --round size
+python pick.py --round poker --note "POT: 60 CHIPS"
 ```
+
+Poker uses the first three zones, labeled FOLD, CALL, and RAISE. Use it at a real table: run the round, then play the fish's decision.
+
+Round options:
+
+| Flag | Effect |
+| --- | --- |
+| `--layout reel` / `wide` | 1080×1920 (default) or 1920×1080 output |
+| `--note "TEXT"` | A line under the question, for the pot, the stakes, the bet |
+| `--footer "TEXT"` | Replace the small line at the bottom. `--footer ""` hides it |
+| `--demo` | Simulated tank, nothing logged |
+| `--no-prices` | Skip the price lookup (it runs in the background and never delays a round) |
+| `--no-preview` | Record without opening a window |
+| `--preview-scale 0.5` | Preview window size. The recording is always full size |
+
+The recording stays in real time even if a slow machine draws fewer frames per second. The preview is only a monitor; film the mp4.
 
 Hold uses the first two zones, labeled HOLD and SELL. The banner names HOLD or SELL, and `picks.csv` stores the ticker in the subject column. Size uses the first three zones, labeled 10%, 25%, and 50%. You still choose the dollars and place the order. If the fish pick 25%, that means 25% of whatever cash you decided to risk.
 
-A buy round needs at least 1 zone, hold needs 2, and size needs 3.
+A buy round needs at least 1 zone, hold needs 2, and size and poker need 3.
 
 ## The ledger
 
@@ -147,7 +185,7 @@ The chart rebuilds the fish account from the trade history: cash and shares as o
 | --- | --- | --- |
 | `camera_index` | `0` | USB camera index |
 | `countdown_seconds` | `15` | Length of a round |
-| `banner_seconds` | `5` | How long the winner stays on screen |
+| `banner_seconds` | `7` | Length of the reveal. The slot spin takes about the first third |
 | `min_blob_area` | `100` | Smallest fish blob, in pixels |
 | `max_blob_area` | `8000` | Largest fish blob, in pixels |
 | `background_mode` | `mog2` | `mog2` or `frame` |

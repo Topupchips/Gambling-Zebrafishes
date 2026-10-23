@@ -27,7 +27,7 @@ TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 DEFAULT_CONFIG: dict = {
     "camera_index": 0,
     "countdown_seconds": 15,
-    "banner_seconds": 5,
+    "banner_seconds": 7,
     "min_blob_area": 100,
     "max_blob_area": 8000,
     "background_mode": "mog2",
@@ -132,7 +132,7 @@ class Zone:
 class Config:
     camera_index: int = 0
     countdown_seconds: int = 15
-    banner_seconds: int = 5
+    banner_seconds: int = 7
     min_blob_area: int = 100
     max_blob_area: int = 8000
     background_mode: str = "mog2"
