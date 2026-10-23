@@ -553,7 +553,7 @@ class TableHud(Hud):
             colours = ("#FF3B4E", "#2EE6D6", "#F5C542", "#A66BFF", "#9BFF4D")
             for s in range(stacks):
                 cx = 128 + s * 96
-                chips = max(1, min(9, per // 25))
+                chips = max(1, min(9, per // 10))
                 for i in range(chips):
                     poker_chip(canvas, cx, y + 20 - i * 9, 36, colours[(i + s) % len(colours)], "")
             label = f"BET {table.bet:,}" + ("  ·  DOUBLED" if table.doubled else "")
@@ -865,10 +865,10 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="The fish play blackjack (play chips).")
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     parser.add_argument("--hands", type=int, default=3, help="Hands to play in one recording.")
-    parser.add_argument("--bet", type=int, default=100, help="Chips per hand when the fish don't choose.")
+    parser.add_argument("--bet", type=int, default=25, help="Chips per hand when the fish don't choose.")
     parser.add_argument("--fish-bet", action="store_true", help="Let the fish vote on the bet before each hand.")
-    parser.add_argument("--bets", default="50,100,250", help="Bet sizes for --fish-bet, one per zone.")
-    parser.add_argument("--bankroll", type=int, default=1000, help="Starting chips for a new or reset bankroll.")
+    parser.add_argument("--bets", default="10,25,50", help="Bet sizes for --fish-bet, one per zone.")
+    parser.add_argument("--bankroll", type=int, default=100, help="Starting chips for a new or reset bankroll.")
     parser.add_argument("--reset", action="store_true", help="Start a fresh bankroll.")
     parser.add_argument("--decision-seconds", type=float, default=8.0, help="Length of each fish vote.")
     parser.add_argument("--demo", action="store_true", help="Simulated tank. Nothing is saved.")

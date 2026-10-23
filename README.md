@@ -60,15 +60,15 @@ python blackjack.py --demo --hands 3 --fish-bet   # pixel tank, nothing saved
 python blackjack.py --hands 5                     # real camera, bankroll kept in blackjack.json
 ```
 
-Draw the zones left to right: HIT, STAND, DOUBLE. With only two zones the fish can't double. `--fish-bet` adds a vote before each hand, using the same zones for the bet sizes in `--bets` (default `50,100,250`).
+Draw the zones left to right: HIT, STAND, DOUBLE. With only two zones the fish can't double. `--fish-bet` adds a vote before each hand, using the same zones for the bet sizes in `--bets` (default `10,25,50`). The fish start with 100 chips.
 
 | Flag | Effect |
 | --- | --- |
 | `--hands N` | Hands per recording (default 3) |
-| `--bet 100` | Chips per hand when the fish don't choose |
-| `--fish-bet`, `--bets 50,100,250` | The fish vote on the bet |
+| `--bet 25` | Chips per hand when the fish don't choose |
+| `--fish-bet`, `--bets 10,25,50` | The fish vote on the bet |
 | `--decision-seconds 8` | Length of each vote |
-| `--bankroll 1000`, `--reset` | Start or restart the chip bankroll |
+| `--bankroll 100`, `--reset` | Start or restart the chip bankroll (default 100) |
 | `--seed 7` | Repeatable shuffle |
 | `--demo`, `--demo-style real`, `--video tank.mp4` | Rehearse without the live tank |
 
