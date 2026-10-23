@@ -81,6 +81,8 @@ One round, then you trade, then you log, then you chart.
 python pick.py --round buy
 ```
 
+`python pick.py --round buy --video tank.mp4` plays that file through the same detection and overlay instead of the webcam.
+
 The preview shows each zone, its ticker, a live fish count, and the countdown (`countdown_seconds`, default 15). The whole round, including the overlay, is saved to `recordings/<timestamp>.mp4`. When time is up, the zone with the most fish wins. If zones are tied, the higher average count over the final 3 seconds wins. If that is still tied, one of the remaining zones is chosen at random. A banner reads `FISH PICKED: <TICKER>` for `banner_seconds` (default 5). The result is appended to `picks.csv`.
 
 Place that trade yourself in your brokerage. Then record the fill:

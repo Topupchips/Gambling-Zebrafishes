@@ -401,6 +401,31 @@ def log_pick(
     )
 
 
+def _fit_frame(frame: np.ndarray, width: int, height: int) -> np.ndarray:
+    frame = even_frame(frame)
+    if frame.shape[1] != width or frame.shape[0] != height:
+        frame = cv2.resize(frame, (width, height))
+    return frame
+
+
+def open_video(path: Path):
+    """Open a video file and return (capture, first_frame). Exits if it cannot."""
+    if not path.exists():
+        die(f"Could not open video {path}. The file is not there.")
+    if hasattr(cv2, "utils") and hasattr(cv2.utils, "logging"):
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_SILENT)
+    capture = cv2.VideoCapture(str(path))
+    if capture is None or not capture.isOpened():
+        if capture is not None:
+            capture.release()
+        die(f"Could not open video {path}. It is not a readable video.")
+    ok, frame = capture.read()
+    if not ok or frame is None:
+        capture.release()
+        die(f"Video {path} opened but did not return a frame.")
+    return capture, frame
+
+
 def _read_frame(capture, width: int, height: int, recording: Path) -> np.ndarray:
     ok, frame = capture.read()
     if not ok or frame is None:
@@ -408,13 +433,29 @@ def _read_frame(capture, width: int, height: int, recording: Path) -> np.ndarray
             f"The webcam stopped returning frames. Partial recording kept at {recording}. "
             "No pick was logged."
         )
-    frame = even_frame(frame)
-    if frame.shape[1] != width or frame.shape[0] != height:
-        frame = cv2.resize(frame, (width, height))
-    return frame
+    return _fit_frame(frame, width, height)
 
 
-def run_round(config: Config, config_path: Path, round_type: str, ticker: str) -> None:
+def _read_video_frame(capture, width: int, height: int, recording: Path, path: Path) -> np.ndarray:
+    ok, frame = capture.read()
+    if not ok or frame is None:
+        capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        ok, frame = capture.read()
+    if not ok or frame is None:
+        die(
+            f"Video {path} stopped returning frames. Partial recording kept at {recording}. "
+            "No pick was logged."
+        )
+    return _fit_frame(frame, width, height)
+
+
+def run_round(
+    config: Config,
+    config_path: Path,
+    round_type: str,
+    ticker: str,
+    video: Path | None = None,
+) -> None:
     zones, subject = round_zones(config, round_type, ticker)
     background = None
     detector = None
@@ -430,7 +471,10 @@ def run_round(config: Config, config_path: Path, round_type: str, ticker: str) -
     writer = None
     recording: Path | None = None
     try:
-        capture, frame = open_camera(config.camera_index)
+        if video is None:
+            capture, frame = open_camera(config.camera_index)
+        else:
+            capture, frame = open_video(video)
         frame = even_frame(frame)
         height, width = frame.shape[:2]
         fps = capture.get(cv2.CAP_PROP_FPS)
@@ -440,7 +484,10 @@ def run_round(config: Config, config_path: Path, round_type: str, ticker: str) -
         writer = open_writer(recording, width, height, fps)
         window = "fish-fund pick | q cancels"
         cv2.namedWindow(window, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window, width, height)
+        cv2.moveWindow(window, 80, 40)
         heading = round_heading(round_type, subject)
+        wait_ms = 1 if video is None else max(1, int(round(1000 / fps)))
         samples: list[tuple[float, list[int]]] = []
         start = time.monotonic()
         winner: int | None = None
@@ -449,7 +496,10 @@ def run_round(config: Config, config_path: Path, round_type: str, ticker: str) -
         cancelled = False
         while True:
             if not first:
-                frame = _read_frame(capture, width, height, recording)
+                if video is None:
+                    frame = _read_frame(capture, width, height, recording)
+                else:
+                    frame = _read_video_frame(capture, width, height, recording, video)
             first = False
             if detector is not None:
                 mask = detector.mask(frame)
@@ -479,7 +529,7 @@ def run_round(config: Config, config_path: Path, round_type: str, ticker: str) -
                 recording.unlink(missing_ok=True)
                 die(f"Could not write a frame to {recording}. The recording was not saved.")
             cv2.imshow(window, display)
-            key = cv2.waitKey(1) & 0xFF
+            key = cv2.waitKey(wait_ms) & 0xFF
             if winner is None and key in (ord("q"), 27):
                 cancelled = True
                 break
@@ -543,9 +593,17 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--round", dest="round_type", choices=("buy", "hold", "size"))
     parser.add_argument("--ticker", default="", help="Stock for a hold round, such as AAPL.")
+    parser.add_argument(
+        "--video",
+        type=Path,
+        default=None,
+        help="Play this video through the overlay instead of the webcam.",
+    )
     args = parser.parse_args(argv)
     if args.capture_background and args.round_type:
         die("Use either --capture-background or --round, not both.")
+    if args.capture_background and args.video is not None:
+        die("Use either --capture-background or --video, not both.")
     config = load_config(args.config)
     if args.capture_background:
         capture_background(config, args.config)
@@ -557,7 +615,7 @@ def main(argv: list[str] | None = None) -> None:
         )
     if args.ticker and args.round_type != "hold":
         die("--ticker is only used with --round hold.")
-    run_round(config, args.config, args.round_type, args.ticker)
+    run_round(config, args.config, args.round_type, args.ticker, args.video)
 
 
 if __name__ == "__main__":
