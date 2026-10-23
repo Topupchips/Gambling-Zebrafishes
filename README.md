@@ -25,7 +25,9 @@ python pick.py --round buy --demo
 python pick.py --round poker --demo --note "POT: 60 CHIPS"
 ```
 
-Demo rounds swim five simulated fish through the real detection and graphics. They are saved as `recordings/demo-*.mp4` and never logged.
+Demo rounds render five realistic zebrafish: painted skin with blue and gold stripes, translucent fins, a spine that undulates as they swim in bursts and glides, soft shadows, and a sand floor under moving caustic light. The fish go through the real detection and graphics, and the feed is labelled SIMULATED TANK. Demo rounds draw every frame on a 30 fps clock, so the recording is smooth even when the preview runs slow. They are saved as `recordings/demo-*.mp4` and never logged.
+
+If `ffmpeg` is installed, every round also saves an H.264 copy (`*-h264.mp4`) that Instagram, TikTok and phones accept.
 
 ## Setup
 

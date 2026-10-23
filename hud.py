@@ -472,6 +472,7 @@ class RoundInfo:
     reveal_seconds: float = 6.0
     fish_expected: int = 5
     footer: str = "PAPER PORTFOLIO  ·  REAL MARKET PRICES  ·  NOT FINANCIAL ADVICE"
+    camera_label: str = "CAM 01  ·  THE TANK"
 
 
 @dataclass
@@ -631,11 +632,11 @@ class Hud:
             x, y = int(zone.x * s), int(zone.y * s)
             w, h = max(4, int(zone.w * s)), max(4, int(zone.h * s))
             is_lead = leader == index
-            fill = 0.10
+            fill = 0.05
             if is_lead:
-                fill = 0.16 + 0.10 * pulse
+                fill = 0.09 + 0.07 * pulse
             if winner is not None:
-                fill = 0.28 + 0.18 * pulse if winner == index else 0.0
+                fill = 0.16 + 0.12 * pulse if winner == index else 0.0
             tint(cam, x + 3, y + 3, w - 6, h - 6, colour, fill)
             if winner is not None and winner != index:
                 darken(cam, 0.45, (x, y, w, h))
@@ -656,10 +657,12 @@ class Hud:
             for px, py, owner in points:
                 colour = DIM if owner is None else zone_hex(owner)
                 if age == n - 1:
-                    cv2.circle(cam, (px, py), 15, hex_bgr(colour), 3, cv2.LINE_AA)
-                    cv2.circle(cam, (px, py), 4, hex_bgr(INK), -1, cv2.LINE_AA)
+                    # A thin four-arc reticle that frames the fish instead of covering it.
+                    rr = int(26 * k + 4)
+                    for start in (20, 110, 200, 290):
+                        cv2.ellipse(cam, (px, py), (rr, rr), 0, start, start + 50, hex_bgr(colour), 2, cv2.LINE_AA)
                 else:
-                    cv2.circle(cam, (px, py), max(1, int(5 * fade)), hex_bgr(mix_hex(SHADOW, colour, fade)), -1, cv2.LINE_AA)
+                    cv2.circle(cam, (px, py), max(1, int(3 * fade)), hex_bgr(mix_hex(SHADOW, colour, fade)), -1, cv2.LINE_AA)
 
         for index, zone in enumerate(zones):
             colour = GOLD if winner == index else zone_hex(index)
@@ -696,7 +699,7 @@ class Hud:
 
         # Captions above the window.
         cap_y = self.cam_y - int(14 * k)
-        blit(canvas, text_sprite("CAM 01  ·  THE TANK", "mono", int(22 * k), MUTED, tracking=2), self.cam_x + 6, cap_y, "lb")
+        blit(canvas, text_sprite(self.info.camera_label, "mono", int(22 * k), MUTED, tracking=2), self.cam_x + 6, cap_y, "lb")
         tracking = text_sprite(f"TRACKING {len(centroids)} FISH", "mono", int(22 * k), INK, tracking=2)
         tx = self.cam_x + self.cam_w - 6
         blit(canvas, tracking, tx, cap_y, "rb")

@@ -322,6 +322,22 @@ def _read_video_frame(capture, width: int, height: int, recording: Path, path: P
     return _fit_frame(frame, width, height)
 
 
+def phone_copy(recording: Path) -> Path | None:
+    """Save an H.264 copy that Instagram, TikTok and phones accept. Needs ffmpeg on PATH."""
+    import shutil
+    import subprocess
+
+    if shutil.which("ffmpeg") is None:
+        return None
+    target = recording.with_name(recording.stem + "-h264.mp4")
+    result = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-y", "-i", str(recording), "-c:v", "libx264", "-crf", "18",
+         "-preset", "medium", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(target)],
+        check=False,
+    )
+    return target if result.returncode == 0 and target.exists() else None
+
+
 def count_rounds(path: Path = PICKS_PATH) -> int:
     if not path.exists():
         return 0
@@ -458,6 +474,15 @@ def run_round(
         if footer is not None:
             info.footer = footer
         start = time.monotonic()
+        frames_done = 0
+
+        def clock() -> float:
+            # Demo rounds run on a frame clock: every recorded frame is a fresh render at a
+            # steady 30 fps, however long each one takes to draw.
+            return start + frames_done / WRITER_FPS if demo else time.monotonic()
+
+        if demo:
+            info.camera_label = "SIMULATED TANK"
         hud = Hud(layout, info, (width, height), start)
         quotes = QuoteLoader(quote_symbols(round_type, zones, subject) if prices else [])
 
@@ -486,15 +511,17 @@ def run_round(
                 else:
                     frame = _read_video_frame(capture, width, height, recording, video)
             first = False
+            # The demo tank hands over a plain pass for detection, so its lighting never counts as fish.
+            seen = capture.detection_frame if demo else frame
             if detector is not None:
-                mask = detector.mask(frame)
+                mask = detector.mask(seen)
             elif background is not None:
-                mask = frame_mask(frame, background)
+                mask = frame_mask(seen, background)
             else:
                 die("background_mode is frame but no background image is loaded.")
             centroids = centroids_from_mask(mask, config.min_blob_area, config.max_blob_area)
             counts, owners = count_zones(centroids, zones)
-            now = time.monotonic()
+            now = clock()
             elapsed = now - start
             fresh = quotes.take()
             if fresh:
@@ -508,8 +535,8 @@ def run_round(
             display = hud.frame(frame, zones, counts, centroids, owners, now)
 
             # Keep the recording in real time even when a frame takes long to draw.
-            due = int((time.monotonic() - start) * WRITER_FPS) + 1
-            repeats = max(1, min(4, due - written))
+            due = int((clock() - start) * WRITER_FPS) + 1
+            repeats = 1 if demo else max(1, min(4, due - written))
             for _ in range(repeats):
                 if writer.write(display) is False:
                     writer.release()
@@ -517,6 +544,7 @@ def run_round(
                     recording.unlink(missing_ok=True)
                     die(f"Could not write a frame to {recording}. The recording was not saved.")
             written += repeats
+            frames_done += 1
 
             key = 255
             if preview:
@@ -527,7 +555,7 @@ def run_round(
             if winner is None and key in (ord("q"), 27):
                 cancelled = True
                 break
-            if winner is not None and (time.monotonic() >= banner_until or key in (ord("q"), 27)):
+            if winner is not None and (clock() >= banner_until or key in (ord("q"), 27)):
                 break
         if winner is None or recording is None:
             if cancelled and recording is not None:
@@ -541,6 +569,14 @@ def run_round(
         print(f"FISH PICKED: {label}")
         print(", ".join(f"{zone.ticker} {count}" for zone, count in zip(zones, final_counts)))
         print(f"Recording: {recording.resolve()}")
+        if writer is not None:
+            writer.release()
+            writer = None
+        phone = phone_copy(recording)
+        if phone is not None:
+            print(f"Phone-ready copy: {phone.resolve()}")
+        else:
+            print("Install ffmpeg to also get an H.264 copy for Instagram and TikTok.")
         if demo:
             print("Demo round: nothing was logged.")
         else:
