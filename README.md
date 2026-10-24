@@ -73,7 +73,7 @@ Draw the zones left to right: HIT, STAND, DOUBLE. With only two zones the fish c
 | `--look studio` / `broadcast`, `--uhd`, `--fps 60`, `--scale 1` | Visual style, 4K master, frame rate, faster draft render |
 | `--demo`, `--demo-style real`, `--video tank.mp4` | Rehearse without the live tank |
 
-Sessions render in the **studio look** by default: a cinematic card room with a brass-framed aquarium above a lamp-lit felt table, editorial serif type, cards pitched and flipped like a real dealer, real chip stacks, a film grade and grain, and almost no interface. Frames are drawn at 2× and downsampled for clean edges. `--uhd` exports a 2160×3840 master, `--fps 60` doubles the frame rate, and `--look broadcast` brings back the neon HUD. The phone-ready copy is encoded at high quality (CRF 14).
+Sessions render in the **studio look** by default: a cinematic card room with a brass-framed aquarium above a lamp-lit felt table, editorial serif type, cards pitched and flipped like a real dealer, real chip stacks, a film grade and grain, and almost no interface. Frames are drawn at 2× and downsampled for clean edges. `--uhd` exports a 2160×3840 master, `--fps 60` doubles the frame rate, and `--look broadcast` brings back the neon HUD. The phone-ready copy is encoded at high quality (CRF 17).
 
 In broadcast mode, each session records a 1080×1920 video: the tank on top, then the felt table with dealt and flipped cards, the vote clock and live tallies, a "THE FISH SAY" reveal, the hand result, and the bankroll counter. Results print at the end, and the bankroll is saved after every hand (except in demo mode).
 

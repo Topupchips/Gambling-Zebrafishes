@@ -865,7 +865,7 @@ class Session:
         for hand in self.bank["hands"][-t.hand_no:]:
             print(f"  {' '.join(hand['fish'])} vs {' '.join(hand['dealer'])}: {'/'.join(hand['decisions']) or '-'} -> {hand['outcome']} {hand['delta']:+,}")
         print(f"Recording: {recording.resolve()}")
-        phone = phone_copy(recording, crf=14 if self.studio is not None else 18)
+        phone = phone_copy(recording, crf=17 if self.studio is not None else 18)
         if phone is not None:
             print(f"Phone-ready copy: {phone.resolve()}")
         if self.demo:

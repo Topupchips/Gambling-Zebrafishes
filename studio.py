@@ -322,7 +322,7 @@ class StudioRenderer:
         self.luts = self._make_luts()
         self.grain = []
         for i in range(6):
-            g = np.random.default_rng(i).normal(0, 4.5, (self.out_size[1], self.out_size[0])).astype(np.float32)
+            g = np.random.default_rng(i).normal(0, 2.6, (self.out_size[1], self.out_size[0])).astype(np.float32)
             g3 = cv2.merge([g, g, g])
             self.grain.append((np.clip(g3, 0, 255).astype(np.uint8), np.clip(-g3, 0, 255).astype(np.uint8)))
         self.frame_no = 0
