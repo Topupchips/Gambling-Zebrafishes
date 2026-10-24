@@ -77,7 +77,6 @@ from hud import (
     zone_hex,
 )
 from pick import (
-    WRITER_FPS,
     MotionDetector,
     centroids_from_mask,
     choose_winner,
@@ -88,8 +87,8 @@ from pick import (
     open_video,
     open_writer,
     phone_copy,
-    preview_size,
 )
+from studio import StudioRenderer
 from utils import CONFIG_PATH, RECORDINGS_DIR, Zone, die, file_stamp, load_config, open_camera
 
 TABLE_LAYOUT = Layout(
@@ -598,6 +597,8 @@ class Session:
 
         labels = ["HIT", "STAND", "DOUBLE"]
         if self.demo:
+            if args.demo_style is None:
+                args.demo_style = "real" if args.look == "studio" else "pixel"
             module = pixel_tank if args.demo_style == "pixel" else real_demo
             self.zones = module.demo_zones(labels)
             tank_cls = pixel_tank.PixelTank if args.demo_style == "pixel" else real_demo.DemoTank
@@ -636,6 +637,7 @@ class Session:
         t = self.table
         t.hand_no += 1
         self.hud.info.number = len(self.bank["hands"]) + 1
+        self.hand_label = f"BLACKJACK  ·  HAND {len(self.bank['hands']) + 1:02d}"
         t.dealer, t.fish, t.bet, t.doubled, t.result = [], [], 0, False, None
         if self.shoe.needs_shuffle():
             t.status = "SHUFFLING A FRESH SHOE"
@@ -708,7 +710,7 @@ class Session:
         record_hand(self.bank, fish_cards, dealer_cards, t.bet, decisions, outcome, delta)
         if not self.demo:
             save_bankroll(self.bank)
-        if delta > 0:
+        if delta > 0 and self.studio is None:
             x, y, w, h = self.hud.strip
             colours = [GOLD, INK, WIN_GREEN, "#7CE38B", GOLD]
             self.hud.confetti.burst(x + w / 2, y + h / 2, self.now, colours, count=120 if outcome == "blackjack" else 80)
@@ -742,17 +744,26 @@ class Session:
             info.camera_label = "SIMULATED TANK"
         start = time.monotonic()
         frames_done = 0
+        fps_out = float(args.fps)
 
         def clock() -> float:
-            return start + frames_done / WRITER_FPS if self.demo else time.monotonic()
+            return start + frames_done / fps_out if self.demo else time.monotonic()
 
         self.hud = TableHud(info, (width, height), start, bool(getattr(cap, "pixel_art", False)))
+        self.hand_label = f"BLACKJACK  ·  HAND {info.number:02d}"
+        self.studio = None
+        out_size = TABLE_LAYOUT.size
+        if args.look == "studio":
+            out_size = (2160, 3840) if args.uhd else (1080, 1920)
+            scale = 2 if (args.uhd or args.scale >= 2) else 1
+            self.studio = StudioRenderer(scale, (width, height), bool(getattr(cap, "pixel_art", False)), out_size=out_size, fps=fps_out, tank_label="SIMULATED TANK" if self.demo else "")
         recording = RECORDINGS_DIR / f"{'demo-' if self.demo else ''}blackjack-{file_stamp()}.mp4"
-        writer = open_writer(recording, *TABLE_LAYOUT.size, WRITER_FPS)
+        writer = open_writer(recording, *out_size, fps_out)
         window = "fish-fund blackjack | q quits"
         preview = not args.no_preview
         if preview:
-            pw, ph = preview_size(TABLE_LAYOUT, args.preview_scale)
+            preview_dims = (int(out_size[0] * (args.preview_scale or 900 / out_size[1])), int(out_size[1] * (args.preview_scale or 900 / out_size[1])))
+            pw, ph = preview_dims
             cv2.namedWindow(window, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(window, pw, ph)
         wait_ms = 1 if video is None else max(1, int(round(1000 / fps)))
@@ -828,15 +839,18 @@ class Session:
                 else:
                     owners = [None] * len(centroids)
 
-                display = self.hud.render(frame, zones, counts, centroids, owners, now, self.table)
-                due = int((clock() - start) * WRITER_FPS) + 1
+                if self.studio is not None:
+                    display = self.studio.render(frame, zones, counts, now, self.table, self.hand_label)
+                else:
+                    display = self.hud.render(frame, zones, counts, centroids, owners, now, self.table)
+                due = int((clock() - start) * fps_out) + 1
                 repeats = 1 if self.demo else max(1, min(4, due - written))
                 for _ in range(repeats):
                     writer.write(display)
                 written += repeats
                 frames_done += 1
                 if preview:
-                    cv2.imshow(window, cv2.resize(display, preview_size(TABLE_LAYOUT, args.preview_scale), interpolation=cv2.INTER_AREA))
+                    cv2.imshow(window, cv2.resize(display, preview_dims, interpolation=cv2.INTER_AREA))
                     if cv2.waitKey(wait_ms) & 0xFF in (ord("q"), 27):
                         print("Stopped early.")
                         break
@@ -851,7 +865,7 @@ class Session:
         for hand in self.bank["hands"][-t.hand_no:]:
             print(f"  {' '.join(hand['fish'])} vs {' '.join(hand['dealer'])}: {'/'.join(hand['decisions']) or '-'} -> {hand['outcome']} {hand['delta']:+,}")
         print(f"Recording: {recording.resolve()}")
-        phone = phone_copy(recording)
+        phone = phone_copy(recording, crf=14 if self.studio is not None else 18)
         if phone is not None:
             print(f"Phone-ready copy: {phone.resolve()}")
         if self.demo:
@@ -872,7 +886,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--reset", action="store_true", help="Start a fresh bankroll.")
     parser.add_argument("--decision-seconds", type=float, default=8.0, help="Length of each fish vote.")
     parser.add_argument("--demo", action="store_true", help="Simulated tank. Nothing is saved.")
-    parser.add_argument("--demo-style", choices=("pixel", "real"), default="pixel")
+    parser.add_argument("--demo-style", choices=("pixel", "real"), default=None, help="Simulated tank style. Default: real for the studio look, pixel for broadcast.")
+    parser.add_argument("--look", choices=("studio", "broadcast"), default="studio", help="studio = cinematic card room (default), broadcast = the neon HUD.")
+    parser.add_argument("--scale", type=int, default=2, help="Studio supersampling: 2 draws at 4K and downsamples for clean edges (default), 1 is faster.")
+    parser.add_argument("--uhd", action="store_true", help="Studio look: export a 2160x3840 master instead of 1080x1920.")
+    parser.add_argument("--fps", type=int, default=30, help="Output frame rate (demo renders every frame; 60 doubles render time).")
     parser.add_argument("--video", type=Path, default=None, help="Play a tank video instead of the webcam.")
     parser.add_argument("--seed", type=int, default=None, help="Fix the shuffle (and demo fish) for a repeatable run.")
     parser.add_argument("--no-preview", action="store_true")

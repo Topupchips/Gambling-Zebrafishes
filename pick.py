@@ -323,7 +323,7 @@ def _read_video_frame(capture, width: int, height: int, recording: Path, path: P
     return _fit_frame(frame, width, height)
 
 
-def phone_copy(recording: Path) -> Path | None:
+def phone_copy(recording: Path, crf: int = 18) -> Path | None:
     """Save an H.264 copy that Instagram, TikTok and phones accept. Needs ffmpeg on PATH."""
     import shutil
     import subprocess
@@ -332,7 +332,7 @@ def phone_copy(recording: Path) -> Path | None:
         return None
     target = recording.with_name(recording.stem + "-h264.mp4")
     result = subprocess.run(
-        ["ffmpeg", "-loglevel", "error", "-y", "-i", str(recording), "-c:v", "libx264", "-crf", "18",
+        ["ffmpeg", "-loglevel", "error", "-y", "-i", str(recording), "-c:v", "libx264", "-crf", str(crf),
          "-preset", "medium", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(target)],
         check=False,
     )

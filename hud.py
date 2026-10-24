@@ -30,6 +30,11 @@ FONT_FILES = {
     "bold": "SpaceGrotesk-Bold.ttf",
     "body": "SpaceGrotesk-Regular.ttf",
     "mono": "JetBrainsMono-Bold.ttf",
+    "mono_light": "JetBrainsMono-Regular.ttf",
+    "serif": "InstrumentSerif-Regular.ttf",
+    "serif_italic": "InstrumentSerif-Italic.ttf",
+    "caps": "CormorantGaramond-SemiBold.ttf",
+    "caps_italic": "CormorantGaramond-SemiBoldItalic.ttf",
 }
 
 
