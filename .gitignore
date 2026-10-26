@@ -9,3 +9,5 @@ background.png
 recordings/*.mp4
 charts/*.png
 blackjack.json
+brain.npz
+brain.tmp.npz

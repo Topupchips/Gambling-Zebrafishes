@@ -466,12 +466,34 @@ class PixelTank:
     def end_vote(self) -> None:
         """Let the fish wander again between votes."""
         self.vote_open = False
+        self.assign = None
+
+    def set_assignment(self, zones_per_fish: list[int] | None) -> None:
+        """Brain mode: send each fish to a zone (the simulated brain's motor output)."""
+        self.assign = zones_per_fish
 
     def _simulate(self, dt: float) -> None:
         """Advance the school one step: wander, or crowd into the favourite zone during a vote."""
         self.t += dt
         steering = getattr(self, "steering", False)
         deciding = self.vote_open and (steering or self.t - self.vote_start > self.vote_seconds * 0.45)
+        assign = getattr(self, "assign", None)
+        if self.vote_open and assign is not None:
+            # Brain mode: every fish holds a lane in the zone the brain sends it to.
+            for i, f in enumerate(self.fish):
+                zi = assign[i % len(assign)]
+                mates = [j for j in range(len(self.fish)) if assign[j % len(assign)] == zi]
+                zone = self.zones[zi]
+                x0, x1 = zone.x / self.scale, (zone.x + zone.w) / self.scale
+                y0, y1 = zone.y / self.scale, (zone.y + zone.h) / self.scale
+                lane_y = y0 + (mates.index(i) + 0.5) * (y1 - y0) / len(mates)
+                if abs(f.target[1] - lane_y) > 4 or not (x0 + 14 <= f.target[0] <= x1 - 14):
+                    f.target = (self.rng.uniform(x0 + 16, x1 - 16), lane_y)
+                    f.burst = max(f.burst, 0.6)
+                elif math.hypot(f.target[0] - f.x, f.target[1] - f.y) < 6:
+                    f.target = (self.rng.uniform(x0 + 16, x1 - 16), lane_y)
+                f.step(dt, self.fish)
+            return
         loyal = [f for f in self.fish if f.loyal]
         for f in self.fish:
             if deciding and f.loyal and steering:

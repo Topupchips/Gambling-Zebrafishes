@@ -1,0 +1,302 @@
+[
+ {
+  "t": 0.0,
+  "event": "hand",
+  "n": 1
+ },
+ {
+  "t": 0.7,
+  "event": "deal",
+  "card": "10S",
+  "face_up": true
+ },
+ {
+  "t": 1.2,
+  "event": "deal",
+  "card": "KC",
+  "face_up": true
+ },
+ {
+  "t": 1.7,
+  "event": "deal",
+  "card": "4D",
+  "face_up": true
+ },
+ {
+  "t": 2.2,
+  "event": "deal",
+  "card": "7H",
+  "face_up": false
+ },
+ {
+  "t": 4.4,
+  "event": "vote",
+  "labels": [
+   "HIT",
+   "STAND",
+   "DOUBLE"
+  ],
+  "question": "14 VS K: HIT, STAND OR DOUBLE?"
+ },
+ {
+  "t": 9.4,
+  "event": "decided",
+  "choice": "HIT",
+  "counts": [
+   4,
+   1,
+   0
+  ]
+ },
+ {
+  "t": 10.9,
+  "event": "deal",
+  "card": "9C",
+  "face_up": true
+ },
+ {
+  "t": 11.8,
+  "event": "flip"
+ },
+ {
+  "t": 12.767,
+  "event": "result",
+  "outcome": "bust",
+  "delta": -10,
+  "bankroll": 90,
+  "fish": [
+   "10S",
+   "4D",
+   "9C"
+  ],
+  "dealer": [
+   "KC",
+   "7H"
+  ]
+ },
+ {
+  "t": 16.2,
+  "event": "hand",
+  "n": 2
+ },
+ {
+  "t": 16.9,
+  "event": "deal",
+  "card": "5H",
+  "face_up": true
+ },
+ {
+  "t": 17.4,
+  "event": "deal",
+  "card": "6C",
+  "face_up": true
+ },
+ {
+  "t": 17.9,
+  "event": "deal",
+  "card": "6D",
+  "face_up": true
+ },
+ {
+  "t": 18.4,
+  "event": "deal",
+  "card": "10S",
+  "face_up": false
+ },
+ {
+  "t": 19.3,
+  "event": "vote",
+  "labels": [
+   "HIT",
+   "STAND",
+   "DOUBLE"
+  ],
+  "question": "11 VS 6: HIT, STAND OR DOUBLE?"
+ },
+ {
+  "t": 24.3,
+  "event": "decided",
+  "choice": "DOUBLE",
+  "counts": [
+   1,
+   0,
+   4
+  ]
+ },
+ {
+  "t": 25.8,
+  "event": "deal",
+  "card": "9H",
+  "face_up": true
+ },
+ {
+  "t": 26.733,
+  "event": "flip"
+ },
+ {
+  "t": 27.7,
+  "event": "deal",
+  "card": "KD",
+  "face_up": true
+ },
+ {
+  "t": 28.667,
+  "event": "result",
+  "outcome": "dealer_bust",
+  "delta": 50,
+  "bankroll": 140,
+  "fish": [
+   "5H",
+   "6D",
+   "9H"
+  ],
+  "dealer": [
+   "6C",
+   "10S",
+   "KD"
+  ]
+ },
+ {
+  "t": 32.067,
+  "event": "hand",
+  "n": 3
+ },
+ {
+  "t": 32.767,
+  "event": "deal",
+  "card": "6S",
+  "face_up": true
+ },
+ {
+  "t": 33.267,
+  "event": "deal",
+  "card": "9D",
+  "face_up": true
+ },
+ {
+  "t": 33.767,
+  "event": "deal",
+  "card": "4H",
+  "face_up": true
+ },
+ {
+  "t": 34.267,
+  "event": "deal",
+  "card": "10C",
+  "face_up": false
+ },
+ {
+  "t": 35.2,
+  "event": "vote",
+  "labels": [
+   "HIT",
+   "STAND",
+   "DOUBLE"
+  ],
+  "question": "10 VS 9: HIT, STAND OR DOUBLE?"
+ },
+ {
+  "t": 40.2,
+  "event": "decided",
+  "choice": "DOUBLE",
+  "counts": [
+   0,
+   2,
+   3
+  ]
+ },
+ {
+  "t": 41.7,
+  "event": "deal",
+  "card": "5C",
+  "face_up": true
+ },
+ {
+  "t": 42.6,
+  "event": "flip"
+ },
+ {
+  "t": 43.567,
+  "event": "result",
+  "outcome": "lose",
+  "delta": -100,
+  "bankroll": 40,
+  "fish": [
+   "6S",
+   "4H",
+   "5C"
+  ],
+  "dealer": [
+   "9D",
+   "10C"
+  ]
+ },
+ {
+  "t": 46.967,
+  "event": "hand",
+  "n": 4
+ },
+ {
+  "t": 47.667,
+  "event": "deal",
+  "card": "3H",
+  "face_up": true
+ },
+ {
+  "t": 48.167,
+  "event": "deal",
+  "card": "8C",
+  "face_up": true
+ },
+ {
+  "t": 48.667,
+  "event": "deal",
+  "card": "4S",
+  "face_up": true
+ },
+ {
+  "t": 49.167,
+  "event": "deal",
+  "card": "10D",
+  "face_up": false
+ },
+ {
+  "t": 50.067,
+  "event": "vote",
+  "labels": [
+   "HIT",
+   "STAND",
+   "DOUBLE"
+  ],
+  "question": "7 VS 8: HIT, STAND OR DOUBLE?"
+ },
+ {
+  "t": 55.067,
+  "event": "decided",
+  "choice": "STAND",
+  "counts": [
+   1,
+   4,
+   0
+  ]
+ },
+ {
+  "t": 56.567,
+  "event": "flip"
+ },
+ {
+  "t": 57.533,
+  "event": "result",
+  "outcome": "lose",
+  "delta": -10,
+  "bankroll": 30,
+  "fish": [
+   "3H",
+   "4S"
+  ],
+  "dealer": [
+   "8C",
+   "10D"
+  ]
+ }
+]
