@@ -442,11 +442,23 @@ class PixelTank:
         m = mask[y0 - y : y1 - y, x0 - x : x1 - x]
         img[y0:y1, x0:x1][m] = sprite[y0 - y : y1 - y, x0 - x : x1 - x][m]
 
-    def start_vote(self, options: int, seconds: float) -> None:
-        """Begin a fresh vote over the first ``options`` zones (used by blackjack)."""
-        self.favourite = self.rng.randrange(max(1, min(options, len(self.zones))))
-        for f in self.fish:
-            f.loyal = self.rng.random() < 0.8
+    def start_vote(self, options: int, seconds: float, favourite: int | None = None) -> None:
+        """Begin a fresh vote over the first ``options`` zones (used by blackjack).
+
+        ``favourite`` steers the school toward one option (story mode for planning shots);
+        otherwise the school picks at random.
+        """
+        n = max(1, min(options, len(self.zones)))
+        self.steering = favourite is not None and 0 <= favourite < n
+        if self.steering:
+            self.favourite = favourite
+            holdout = self.rng.randrange(len(self.fish))
+            for i, f in enumerate(self.fish):
+                f.loyal = i != holdout
+        else:
+            self.favourite = self.rng.randrange(n)
+            for f in self.fish:
+                f.loyal = self.rng.random() < 0.8
         self.vote_start = self.t
         self.vote_seconds = seconds
         self.vote_open = True
@@ -458,9 +470,12 @@ class PixelTank:
     def _simulate(self, dt: float) -> None:
         """Advance the school one step: wander, or crowd into the favourite zone during a vote."""
         self.t += dt
-        deciding = self.vote_open and self.t - self.vote_start > self.vote_seconds * 0.45
+        steering = getattr(self, "steering", False)
+        deciding = self.vote_open and (steering or self.t - self.vote_start > self.vote_seconds * 0.45)
         loyal = [f for f in self.fish if f.loyal]
         for f in self.fish:
+            if deciding and f.loyal and steering:
+                f.burst = max(f.burst, 0.7)
             if deciding and f.loyal:
                 # Each committed fish holds its own lane in the chosen zone, so the school
                 # crowds in without piling on top of each other.

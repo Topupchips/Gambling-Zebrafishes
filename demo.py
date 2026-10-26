@@ -465,11 +465,22 @@ class DemoTank:
         return cv2.GaussianBlur(light, (5, 5), 1.0)
 
     # Frames -----------------------------------------------------------------
-    def start_vote(self, options: int, seconds: float) -> None:
-        """Begin a fresh vote over the first ``options`` zones (used by blackjack)."""
-        self.favourite = self.rng.randrange(max(1, min(options, len(self.zones))))
-        for f in self.fish:
-            f.loyal = self.rng.random() < 0.8
+    def start_vote(self, options: int, seconds: float, favourite: int | None = None) -> None:
+        """Begin a fresh vote over the first ``options`` zones (used by blackjack).
+
+        ``favourite`` steers the school toward one option (story mode for planning shots);
+        otherwise the school picks at random.
+        """
+        n = max(1, min(options, len(self.zones)))
+        if favourite is not None and 0 <= favourite < n:
+            self.favourite = favourite
+            holdout = self.rng.randrange(len(self.fish))
+            for i, f in enumerate(self.fish):
+                f.loyal = i != holdout
+        else:
+            self.favourite = self.rng.randrange(n)
+            for f in self.fish:
+                f.loyal = self.rng.random() < 0.8
         self.vote_start = self.t
         self.vote_seconds = seconds
         self.vote_open = True

@@ -82,6 +82,11 @@ class Shoe:
         self.cards = [Card(r, s) for _ in range(self.decks) for s in SUITS for r in RANKS]
         self.rng.shuffle(self.cards)
 
+    def stack(self, cards: list[Card]) -> None:
+        """Put these cards on top, dealt in this order (story mode)."""
+        for card in reversed(cards):
+            self.cards.append(card)
+
     def needs_shuffle(self) -> bool:
         return len(self.cards) < self.decks * 52 * 0.25
 

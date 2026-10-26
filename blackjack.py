@@ -591,6 +591,18 @@ class Session:
         self.demo = args.demo
         self.rng = random.Random(args.seed)
         self.shoe = Shoe(6, random.Random(args.seed) if args.seed is not None else None)
+        self.story_votes: list[str] = []
+        self.story_bets: list[int] = []
+        self.events: list[dict] = []
+        if args.story is not None:
+            if not args.demo:
+                die("--story only works with --demo: it plans a simulated session for rehearsing shots.")
+            import json
+
+            story = json.loads(Path(args.story).read_text())
+            self.shoe.stack([Card(c[:-1], c[-1]) for c in story.get("cards", [])])
+            self.story_votes = [str(v) for v in story.get("votes", [])]
+            self.story_bets = [int(v) for v in story.get("bets", [])]
         self.bank = {"bankroll": args.bankroll, "start": args.bankroll, "hands": []} if (args.demo or args.reset) else load_bankroll(start=args.bankroll)
         start = int(self.bank["bankroll"])
         self.table = Table(bankroll=start, start_bankroll=start)
@@ -625,6 +637,8 @@ class Session:
     def deal(self, hand: list[TableCard], now: float, face_up: bool = True) -> Card:
         card = self.shoe.draw()
         hand.append(TableCard(card, now, face_up))
+        if hasattr(self, "t0"):
+            self.events.append({"t": round(now - self.t0, 3), "event": "deal", "card": card.code(), "face_up": face_up})
         return card
 
     def script(self):
@@ -643,6 +657,7 @@ class Session:
     def hand(self):
         t = self.table
         t.hand_no += 1
+        self.events.append({"t": round(self.now - self.t0, 3), "event": "hand", "n": t.hand_no})
         self.hud.info.number = len(self.bank["hands"]) + 1
         self.hand_label = f"BLACKJACK  ·  HAND {len(self.bank['hands']) + 1:02d}"
         t.dealer, t.fish, t.bet, t.doubled, t.result = [], [], 0, False, None
@@ -651,7 +666,9 @@ class Session:
             self.shoe.shuffle()
             yield Wait(1.4)
         options = [b for b in self.bets if b <= t.bankroll] or [t.bankroll]
-        if self.args.fish_bet and len(options) > 1:
+        if self.story_bets:
+            bet = min(self.story_bets.pop(0), t.bankroll)
+        elif self.args.fish_bet and len(options) > 1:
             options = options[: len(self.zones)]
             choice = yield Vote([str(b) for b in options], "HOW MANY CHIPS DO THEY BET?", self.args.decision_seconds)
             bet = int(choice)
@@ -671,6 +688,7 @@ class Session:
 
         def reveal():
             dealer_hole.flip_at = self.now
+            self.events.append({"t": round(self.now - self.t0, 3), "event": "flip"})
             return Wait(FLIP_SECONDS + 0.6)
 
         if dealer_peeks(dealer_cards[0]):
@@ -713,6 +731,7 @@ class Session:
         outcome, delta = settle(fish_cards, dealer_cards, t.bet)
         t.status = ""
         t.result = (outcome, delta, self.now)
+        self.events.append({"t": round(self.now - self.t0, 3), "event": "result", "outcome": outcome, "delta": delta, "bankroll": t.bankroll + delta, "fish": [c.code() for c in fish_cards], "dealer": [c.code() for c in dealer_cards]})
         t.bankroll += delta
         record_hand(self.bank, fish_cards, dealer_cards, t.bet, decisions, outcome, delta)
         if not self.demo:
@@ -750,6 +769,7 @@ class Session:
         if self.demo:
             info.camera_label = "SIMULATED TANK"
         start = time.monotonic()
+        self.t0 = start
         frames_done = 0
         fps_out = float(args.fps)
 
@@ -812,7 +832,12 @@ class Session:
                             self.table.vote = command
                             self.hud.state.shares = [0.0] * len(command.labels)
                             if self.demo:
-                                cap.start_vote(len(command.labels), command.seconds)
+                                steer = None
+                                if self.story_votes:
+                                    want = self.story_votes.pop(0)
+                                    steer = command.labels.index(want) if want in command.labels else None
+                                cap.start_vote(len(command.labels), command.seconds, favourite=steer)
+                            self.events.append({"t": round(now - start, 3), "event": "vote", "labels": command.labels, "question": command.question})
                         if command.winner is None or now - command.decided_at < 1.5:
                             break
                         result = command.labels[command.winner]
@@ -842,7 +867,12 @@ class Session:
                         vote.samples.append((now - vote.started, list(counts)))
                         if now - vote.started >= vote.seconds:
                             vote.winner = choose_winner(vote.samples)
+                            steer = getattr(cap, "favourite", None) if (self.demo and getattr(cap, "steering", False)) else None
+                            if steer is not None and vote.winner != steer:
+                                print(f"  story: the school picked {vote.labels[vote.winner]}, plan says {vote.labels[steer]}; following the plan")
+                                vote.winner = steer
                             vote.decided_at = now
+                            self.events.append({"t": round(now - start, 3), "event": "decided", "choice": vote.labels[vote.winner], "counts": list(counts)})
                             self.hud.state.winner = vote.winner
                             if self.demo:
                                 cap.end_vote()
@@ -885,6 +915,12 @@ class Session:
         for hand in self.bank["hands"][-t.hand_no:]:
             print(f"  {' '.join(hand['fish'])} vs {' '.join(hand['dealer'])}: {'/'.join(hand['decisions']) or '-'} -> {hand['outcome']} {hand['delta']:+,}")
         print(f"Recording: {recording.resolve()}")
+        if self.events:
+            import json
+
+            events_path = recording.with_suffix(".events.json")
+            events_path.write_text(json.dumps(self.events, indent=1))
+            print(f"Timeline: {events_path.resolve()}")
         phone = phone_copy(recording, crf=17 if self.studio is not None else 18)
         if phone is not None:
             print(f"Phone-ready copy: {phone.resolve()}")
@@ -907,6 +943,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--decision-seconds", type=float, default=8.0, help="Length of each fish vote.")
     parser.add_argument("--demo", action="store_true", help="Simulated tank. Nothing is saved.")
     parser.add_argument("--demo-style", choices=("cartoon", "pixel", "real"), default=None, help="Simulated tank style. Default: cartoon for the studio look, pixel for broadcast.")
+    parser.add_argument("--story", type=Path, default=None, help="Demo only: a JSON plan of cards and fish choices, for rehearsing a planned edit.")
     parser.add_argument("--cartoon", action="store_true", help="Live: draw your real fish as hand-drawn cartoons, placed where the camera sees them.")
     parser.add_argument("--look", choices=("studio", "broadcast"), default="studio", help="studio = cinematic card room (default), broadcast = the neon HUD.")
     parser.add_argument("--scale", type=int, default=2, help="Studio supersampling: 2 draws at 4K and downsamples for clean edges (default), 1 is faster.")
