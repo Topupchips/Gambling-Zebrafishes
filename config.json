@@ -1,0 +1,10 @@
+{
+  "camera_index": 0,
+  "countdown_seconds": 15,
+  "banner_seconds": 7,
+  "min_blob_area": 100,
+  "max_blob_area": 8000,
+  "background_mode": "mog2",
+  "background_image": "",
+  "zones": []
+}

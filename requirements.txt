@@ -1,0 +1,6 @@
+opencv-python
+numpy
+yfinance
+matplotlib
+pandas
+Pillow
