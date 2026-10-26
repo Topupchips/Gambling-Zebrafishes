@@ -31,6 +31,7 @@ import cv2
 import numpy as np
 
 import demo as real_demo
+import cartoon_tank
 import pixel_tank
 from blackjack_game import (
     BLACKJACK_PATH,
@@ -598,11 +599,11 @@ class Session:
         labels = ["HIT", "STAND", "DOUBLE"]
         if self.demo:
             if args.demo_style is None:
-                args.demo_style = "real" if args.look == "studio" else "pixel"
-            module = pixel_tank if args.demo_style == "pixel" else real_demo
+                args.demo_style = "cartoon" if args.look == "studio" else "pixel"
+            module = {"pixel": pixel_tank, "real": real_demo, "cartoon": cartoon_tank}[args.demo_style]
             self.zones = module.demo_zones(labels)
-            tank_cls = pixel_tank.PixelTank if args.demo_style == "pixel" else real_demo.DemoTank
-            self.capture = tank_cls(self.zones, float(args.decision_seconds))
+            tank_cls = {"pixel": pixel_tank.PixelTank, "real": real_demo.DemoTank, "cartoon": cartoon_tank.CartoonTank}[args.demo_style]
+            self.capture = tank_cls(self.zones, float(args.decision_seconds), seed=args.seed)
             self.capture.end_vote()
             self.background = self.capture.empty_frame
             self.detector = None
@@ -613,6 +614,12 @@ class Session:
             self.capture = None
             self.background = load_background(self.config, args.config) if self.config.background_mode == "frame" else None
             self.detector = MotionDetector() if self.background is None else None
+        # Live cartoon: the real fish are tracked by the camera and drawn as cartoons.
+        self.cartoon = None
+        if args.cartoon and not self.demo:
+            self.cartoon = cartoon_tank.CartoonTank(cartoon_tank.demo_zones(labels), float(args.decision_seconds), seed=args.seed)
+        tank = self.capture if self.demo else None
+        self.blob_area = getattr(tank, "blob_area", (self.config.min_blob_area, self.config.max_blob_area))
 
     # Script ------------------------------------------------------------------
     def deal(self, hand: list[TableCard], now: float, face_up: bool = True) -> Card:
@@ -749,14 +756,17 @@ class Session:
         def clock() -> float:
             return start + frames_done / fps_out if self.demo else time.monotonic()
 
-        self.hud = TableHud(info, (width, height), start, bool(getattr(cap, "pixel_art", False)))
+        art_size = (cartoon_tank.WIDTH, cartoon_tank.HEIGHT) if self.cartoon is not None else (width, height)
+        art_source = self.cartoon if self.cartoon is not None else cap
+        self.hud = TableHud(info, art_size, start, bool(getattr(art_source, "pixel_art", False)))
         self.hand_label = f"BLACKJACK  ·  HAND {info.number:02d}"
         self.studio = None
         out_size = TABLE_LAYOUT.size
         if args.look == "studio":
             out_size = (2160, 3840) if args.uhd else (1080, 1920)
             scale = 2 if (args.uhd or args.scale >= 2) else 1
-            self.studio = StudioRenderer(scale, (width, height), bool(getattr(cap, "pixel_art", False)), out_size=out_size, fps=fps_out, tank_label="SIMULATED TANK" if self.demo else "")
+            label = "SIMULATED TANK" if self.demo else ("REAL FISH, DRAWN LIVE" if self.cartoon is not None else "")
+            self.studio = StudioRenderer(scale, art_size, bool(getattr(art_source, "pixel_art", False)), out_size=out_size, fps=fps_out, tank_label=label, illustrated=bool(getattr(art_source, "illustrated", False)))
         recording = RECORDINGS_DIR / f"{'demo-' if self.demo else ''}blackjack-{file_stamp()}.mp4"
         writer = open_writer(recording, *out_size, fps_out)
         window = "fish-fund blackjack | q quits"
@@ -820,7 +830,7 @@ class Session:
                     mask = frame_mask(seen, self.background)
                 else:
                     mask = self.detector.mask(seen)
-                centroids = centroids_from_mask(mask, self.config.min_blob_area, self.config.max_blob_area)
+                centroids = centroids_from_mask(mask, *self.blob_area)
                 vote = self.table.vote
                 zones: list[Zone] = []
                 counts: list[int] = []
@@ -839,10 +849,20 @@ class Session:
                 else:
                     owners = [None] * len(centroids)
 
+                art, art_zones, art_centroids = frame, zones, centroids
+                if self.cartoon is not None:
+                    # Draw the real fish as cartoons; map zones and dots into the drawing.
+                    _ok, art = self.cartoon.drive([(cx / width, cy / height) for cx, cy in centroids])
+                    sx, sy = cartoon_tank.WIDTH / width, cartoon_tank.HEIGHT / height
+                    art_zones = [Zone(z.ticker, int(z.x * sx), int(z.y * sy), int(z.w * sx), int(z.h * sy)) for z in zones]
+                    art_centroids = []
+                    for cx, cy in centroids:
+                        tx, ty = cartoon_tank.CartoonTank.to_tank(cx / width, cy / height)
+                        art_centroids.append((int(tx * cartoon_tank.K), int(ty * cartoon_tank.K)))
                 if self.studio is not None:
-                    display = self.studio.render(frame, zones, counts, now, self.table, self.hand_label)
+                    display = self.studio.render(art, art_zones, counts, now, self.table, self.hand_label)
                 else:
-                    display = self.hud.render(frame, zones, counts, centroids, owners, now, self.table)
+                    display = self.hud.render(art, art_zones, counts, art_centroids, owners, now, self.table)
                 due = int((clock() - start) * fps_out) + 1
                 repeats = 1 if self.demo else max(1, min(4, due - written))
                 for _ in range(repeats):
@@ -886,7 +906,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--reset", action="store_true", help="Start a fresh bankroll.")
     parser.add_argument("--decision-seconds", type=float, default=8.0, help="Length of each fish vote.")
     parser.add_argument("--demo", action="store_true", help="Simulated tank. Nothing is saved.")
-    parser.add_argument("--demo-style", choices=("pixel", "real"), default=None, help="Simulated tank style. Default: real for the studio look, pixel for broadcast.")
+    parser.add_argument("--demo-style", choices=("cartoon", "pixel", "real"), default=None, help="Simulated tank style. Default: cartoon for the studio look, pixel for broadcast.")
+    parser.add_argument("--cartoon", action="store_true", help="Live: draw your real fish as hand-drawn cartoons, placed where the camera sees them.")
     parser.add_argument("--look", choices=("studio", "broadcast"), default="studio", help="studio = cinematic card room (default), broadcast = the neon HUD.")
     parser.add_argument("--scale", type=int, default=2, help="Studio supersampling: 2 draws at 4K and downsamples for clean edges (default), 1 is faster.")
     parser.add_argument("--uhd", action="store_true", help="Studio look: export a 2160x3840 master instead of 1080x1920.")

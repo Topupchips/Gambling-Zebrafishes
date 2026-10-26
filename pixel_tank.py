@@ -226,6 +226,7 @@ class PixelTank:
     """
 
     pixel_art = True
+    scale = SCALE  # tank pixels per simulation unit
 
     def __init__(self, zones: list[Zone], countdown: float, fish: int = 5, favourite: int | None = None, seed: int | None = None) -> None:
         self.rng = random.Random(seed)
@@ -265,8 +266,8 @@ class PixelTank:
     def _random_point(self, zone: Zone | None = None) -> tuple[float, float]:
         if zone is None:
             return (self.rng.uniform(24, LOW_W - 24), self.rng.uniform(WATER_TOP + 14, SAND_TOP - 14))
-        x0, x1 = zone.x / SCALE, (zone.x + zone.w) / SCALE
-        y0, y1 = zone.y / SCALE, (zone.y + zone.h) / SCALE
+        x0, x1 = zone.x / self.scale, (zone.x + zone.w) / self.scale
+        y0, y1 = zone.y / self.scale, (zone.y + zone.h) / self.scale
         return (self.rng.uniform(x0 + 12, x1 - 12), self.rng.uniform(y0 + 12, y1 - 12))
 
     # Static scene -----------------------------------------------------------
@@ -454,8 +455,8 @@ class PixelTank:
         """Let the fish wander again between votes."""
         self.vote_open = False
 
-    def read(self) -> tuple[bool, np.ndarray]:
-        dt = 1.0 / FPS
+    def _simulate(self, dt: float) -> None:
+        """Advance the school one step: wander, or crowd into the favourite zone during a vote."""
         self.t += dt
         deciding = self.vote_open and self.t - self.vote_start > self.vote_seconds * 0.45
         loyal = [f for f in self.fish if f.loyal]
@@ -465,8 +466,8 @@ class PixelTank:
                 # crowds in without piling on top of each other.
                 zone = self.zones[self.favourite]
                 lane = loyal.index(f)
-                x0, x1 = zone.x / SCALE, (zone.x + zone.w) / SCALE
-                y0, y1 = zone.y / SCALE, (zone.y + zone.h) / SCALE
+                x0, x1 = zone.x / self.scale, (zone.x + zone.w) / self.scale
+                y0, y1 = zone.y / self.scale, (zone.y + zone.h) / self.scale
                 lane_y = y0 + (lane + 0.5) * (y1 - y0) / len(loyal)
                 if abs(f.target[1] - lane_y) > 4 or not (x0 + 14 <= f.target[0] <= x1 - 14):
                     f.target = (self.rng.uniform(x0 + 16, x1 - 16), lane_y)
@@ -478,6 +479,9 @@ class PixelTank:
                 f.target = self._random_point(self.rng.choice(others)) if deciding and others else self._random_point()
             f.step(dt, self.fish)
 
+    def read(self) -> tuple[bool, np.ndarray]:
+        dt = 1.0 / FPS
+        self._simulate(dt)
         img = self.static.copy()
         self._draw_rays(img)
         self._draw_plants(img)

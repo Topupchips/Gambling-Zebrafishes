@@ -71,7 +71,14 @@ Draw the zones left to right: HIT, STAND, DOUBLE. With only two zones the fish c
 | `--bankroll 100`, `--reset` | Start or restart the chip bankroll (default 100) |
 | `--seed 7` | Repeatable shuffle |
 | `--look studio` / `broadcast`, `--uhd`, `--fps 60`, `--scale 1` | Visual style, 4K master, frame rate, faster draft render |
-| `--demo`, `--demo-style real`, `--video tank.mp4` | Rehearse without the live tank |
+| `--cartoon` | Draw your real fish as hand-drawn cartoons |
+| `--demo`, `--demo-style cartoon/pixel/real`, `--video tank.mp4` | Rehearse without the live tank |
+
+**The fish are hand-drawn cartoons.** In the studio look, the tank is an illustrated aquarium: big-eyed cartoon zebrafish with ink outlines that "boil" slightly, watercolour water, fills painted a touch off-register, paper grain, and the tank drawn on twos (a new drawing every other frame), like traditional animation. The vote labels sit on little paper tags.
+
+- `python blackjack.py --demo` runs simulated cartoon fish (`--demo-style cartoon`, the studio default).
+- `python blackjack.py --cartoon` draws **your real fish** as cartoons: the camera still tracks them and decides every vote, and each cartoon fish swims to where a real fish is. Left-right position is kept exactly so the voting columns line up; front-to-back in the tank becomes height in the water. The feed is labelled REAL FISH, DRAWN LIVE.
+- `--demo-style pixel` or `real` switch the simulated tank; `pick.py --demo --demo-style cartoon` uses the cartoon tank for stock rounds too.
 
 Sessions render in the **studio look** by default: a cinematic card room with a brass-framed aquarium above a lamp-lit felt table, editorial serif type, cards pitched and flipped like a real dealer, real chip stacks, a film grade and grain, and almost no interface. Frames are drawn at 2× and downsampled for clean edges. `--uhd` exports a 2160×3840 master, `--fps 60` doubles the frame rate, and `--look broadcast` brings back the neon HUD. The phone-ready copy is encoded at high quality (CRF 17).
 

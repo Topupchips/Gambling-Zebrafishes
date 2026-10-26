@@ -297,7 +297,8 @@ class StudioRenderer:
     FLIP = 0.42
     DEAL = 0.55
 
-    def __init__(self, scale: int, source_size: tuple[int, int], pixel_art: bool = False, out_size: tuple[int, int] | None = None, fps: float = 30.0, tank_label: str = "") -> None:
+    def __init__(self, scale: int, source_size: tuple[int, int], pixel_art: bool = False, out_size: tuple[int, int] | None = None, fps: float = 30.0, tank_label: str = "", illustrated: bool = False) -> None:
+        self.illustrated = illustrated
         self.S = scale
         self.tank_label = tank_label
         self.W, self.H = W0 * scale, H0 * scale
@@ -597,11 +598,19 @@ class StudioRenderer:
             self._tank_matrix = (grey + np.eye(3, dtype=np.float32) * sat) * tint[:, None]
             self._win_shade_u8 = cv2.merge([np.clip(self.win_shade * 255, 0, 255).astype(np.uint8)] * 3)
             self._win_glare_u8 = cv2.merge([np.clip(self.win_glare * 255, 0, 255).astype(np.uint8)] * 3)
-        graded = cv2.transform(source, self._tank_matrix)
-        graded = cv2.convertScaleAbs(graded, alpha=1.14, beta=-6)
+        if self.illustrated:
+            graded = source  # drawn art keeps its own colours
+        else:
+            graded = cv2.transform(source, self._tank_matrix)
+            graded = cv2.convertScaleAbs(graded, alpha=1.14, beta=-6)
         scale = max(w / src_w, h / src_h)
         sw, sh = int(src_w * scale), int(src_h * scale)
-        interp = cv2.INTER_NEAREST if self.pixel_art else cv2.INTER_CUBIC
+        if self.pixel_art:
+            interp = cv2.INTER_NEAREST
+        elif scale < 1:
+            interp = cv2.INTER_AREA
+        else:
+            interp = cv2.INTER_CUBIC
         cam = cv2.resize(graded, (sw, sh), interpolation=interp)
         ox, oy = (sw - w) // 2, (sh - h) // 2
         cam = np.ascontiguousarray(cam[oy : oy + h, ox : ox + w])
@@ -630,15 +639,46 @@ class StudioRenderer:
             under = np.ascontiguousarray(bg[y + cy0 : y + cy0 + R, x + cx0 : x + cx0 + R])
             canvas[y + cy0 : y + cy0 + R, x + cx0 : x + cx0 + R] = cv2.blendLinear(patch, under, m, 1.0 - m)
 
+    def _paper_tag(self, cam, text: str, cx: float, cy: float, hot: bool, faded: bool, count: int, seed: int) -> None:
+        """A hand-drawn paper label: cream (gold when leading), wobbly ink edge, ink dots per fish."""
+        ink_col = "#1E2228"
+        label = text_sprite(text, "caps", self.s(40), ink_col, tracking=self.s(3))
+        pw, ph = label.shape[1] + self.s(36), label.shape[0] + self.s(22)
+        x0, y0 = int(cx - pw / 2), int(cy - ph / 2)
+        rng = np.random.default_rng(seed * 7 + 1)
+        jit = rng.uniform(-1.5, 1.5, (4, 2)) * self.S
+        quad = np.array([(x0, y0), (x0 + pw, y0), (x0 + pw, y0 + ph), (x0, y0 + ph)], np.float32) + jit
+        face = "#F2C14E" if hot else "#F6EFDF"
+        layer = cam.copy()
+        cv2.fillPoly(layer, [np.round(quad + np.array([2, 2]) * self.S).astype(np.int32)], hex_bgr("#1E2228"), cv2.LINE_AA)
+        cv2.fillPoly(layer, [np.round(quad).astype(np.int32)], hex_bgr(face), cv2.LINE_AA)
+        cv2.polylines(layer, [np.round(quad).astype(np.int32)], True, hex_bgr(ink_col), max(1, self.s(2.5)), cv2.LINE_AA)
+        blit(layer, label, cx, cy, "cc")
+        dot_r, gap = self.s(5), self.s(15)
+        if count > 6:
+            num = text_sprite(f"{count} FISH", "mono", self.s(18), "#F6EFDF", tracking=self.s(2))
+            blit(layer, num, cx, y0 + ph + self.s(18), "cc")
+            count = 0
+        start = cx - gap * (max(count, 1) - 1) / 2
+        for k in range(count):
+            p = (int(start + k * gap), int(y0 + ph + self.s(16)))
+            cv2.circle(layer, p, dot_r, hex_bgr("#F6EFDF"), -1, cv2.LINE_AA)
+            cv2.circle(layer, p, dot_r, hex_bgr(ink_col), max(1, self.S), cv2.LINE_AA)
+        alpha = 0.45 if faded else 1.0
+        cam[:] = cv2.addWeighted(layer, alpha, cam, 1 - alpha, 0)
+
     def _draw_vote_overlay(self, cam, zones, counts, vote, scale, ox, now) -> None:
         h, w = cam.shape[:2]
         S = self.S
-        # Bottom scrim for the labels.
+        # Bottom scrim for the labels (photographic tanks only; drawn tanks get paper tags).
         scrim_h = self.s(150)
-        if not hasattr(self, "_scrim"):
+        if self.illustrated:
+            pass
+        elif not hasattr(self, "_scrim"):
             t = np.linspace(0, 1, scrim_h, dtype=np.float32)[:, None]
             self._scrim = cv2.merge([np.repeat(((1 - 0.62 * t ** 1.4) * 255).astype(np.uint8), w, axis=1)] * 3)
-        cam[h - scrim_h :] = cv2.multiply(cam[h - scrim_h :], self._scrim, scale=1 / 255)
+        if not self.illustrated:
+            cam[h - scrim_h :] = cv2.multiply(cam[h - scrim_h :], self._scrim, scale=1 / 255)
         leader = None
         if counts and max(counts) > 0 and counts.count(max(counts)) == 1:
             leader = counts.index(max(counts))
@@ -654,6 +694,9 @@ class StudioRenderer:
             chosen = vote.winner == i
             lead = leader == i and vote.winner is None
             colour = WIN if chosen or lead else CREAM
+            if self.illustrated:
+                self._paper_tag(cam, z.ticker, mid, h - self.s(58), chosen or lead, faded=vote.winner is not None and not chosen, count=counts[i] if i < len(counts) else 0, seed=i)
+                continue
             label = text_sprite(z.ticker, "caps", self.s(46), colour, tracking=self.s(3))
             blit(cam, label, mid, h - self.s(66), "cb", alpha=1.0 if (chosen or lead or vote.winner is None) else 0.45)
             n = counts[i] if i < len(counts) else 0

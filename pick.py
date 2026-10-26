@@ -33,6 +33,7 @@ from utils import (
     update_config,
 )
 import demo as real_demo
+import cartoon_tank
 import pixel_tank
 from hud import LAYOUTS, Hud, Layout, Quote, RoundInfo
 
@@ -430,7 +431,7 @@ def run_round(
             labels = [zone.ticker for zone in config.zones] or list(DEMO_TICKERS)
         else:
             labels = list(ROUND_LABELS[round_type])
-        tank_module = pixel_tank if demo_style == "pixel" else real_demo
+        tank_module = {"pixel": pixel_tank, "real": real_demo, "cartoon": cartoon_tank}[demo_style]
         zones = tank_module.demo_zones(labels)
         subject = (normalize_ticker(ticker) or "NVDA") if round_type == "hold" else ""
         background = None  # set from the tank's empty frame below
@@ -453,7 +454,7 @@ def run_round(
     window = "fish-fund | q cancels"
     try:
         if demo:
-            capture = (pixel_tank.PixelTank if demo_style == "pixel" else real_demo.DemoTank)(zones, float(config.countdown_seconds))
+            capture = {"pixel": pixel_tank.PixelTank, "real": real_demo.DemoTank, "cartoon": cartoon_tank.CartoonTank}[demo_style](zones, float(config.countdown_seconds))
             # The simulated tank knows exactly what it looks like empty, like --capture-background.
             background = capture.empty_frame
             _ok, frame = capture.read()
@@ -524,7 +525,10 @@ def run_round(
                 mask = frame_mask(seen, background)
             else:
                 die("background_mode is frame but no background image is loaded.")
-            centroids = centroids_from_mask(mask, config.min_blob_area, config.max_blob_area)
+            blob_area = (config.min_blob_area, config.max_blob_area)
+            if demo:
+                blob_area = getattr(capture, "blob_area", blob_area)
+            centroids = centroids_from_mask(mask, *blob_area)
             counts, owners = count_zones(centroids, zones)
             now = clock()
             elapsed = now - start
@@ -638,7 +642,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Play this video through the overlay instead of the webcam.",
     )
     parser.add_argument("--demo", action="store_true", help="Rehearse with a simulated tank. Nothing is logged.")
-    parser.add_argument("--demo-style", choices=("pixel", "real"), default="pixel", help="pixel = pixel-art aquarium (default), real = realistic top-down tank.")
+    parser.add_argument("--demo-style", choices=("pixel", "cartoon", "real"), default="pixel", help="pixel = pixel-art aquarium (default), cartoon = hand-drawn tank, real = realistic top-down tank.")
     parser.add_argument("--layout", choices=tuple(LAYOUTS), default="reel", help="reel = 1080x1920 vertical (default), wide = 1920x1080.")
     parser.add_argument("--note", default="", help='Line shown under the question, e.g. "POT: 40 CHIPS".')
     parser.add_argument("--footer", default=None, help="Replace the small line at the bottom. Pass \"\" to hide it.")
